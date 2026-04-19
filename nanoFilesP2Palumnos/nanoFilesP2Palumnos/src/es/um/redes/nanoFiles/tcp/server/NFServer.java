@@ -139,19 +139,45 @@ public class NFServer implements Runnable {
 			PeerMessage request = PeerMessage.readMessageFromInputStream(dis);
 			System.out.println(" [*] Servidor recibe petición con Opcode: " + request.getOpcode());
 			
-			PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_ERR_NOT_FOUND);
-			response.writeMessageToOutputStream(dos);
-			System.out.println(" [*] Servidor envía respuesta de error.");
-		
-		} catch (IOException e) {
+			if (request.getOpcode() == PeerMessageOps.OPCODE_DOWNLOAD_REQ) {
+				String requestedHash = request.getHash();
+				
+				// 1. Obtener los ficheros que compartimos y buscar el hash
+				es.um.redes.nanoFiles.util.FileInfo[] files = es.um.redes.nanoFiles.application.NanoFiles.db.getFiles();
+				es.um.redes.nanoFiles.util.FileInfo[] matches = es.um.redes.nanoFiles.util.FileInfo.lookupHashSubstring(files, requestedHash);
+
+				if (matches == null || matches.length == 0) {
+					// No existe
+					PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_ERR_NOT_FOUND);
+					response.writeMessageToOutputStream(dos);
+					
+				} else if (matches.length > 1) {
+					// Hay varios archivos que empiezan con esos mismos caracteres
+					PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_ERR_AMBIGUOUS_HASH);
+					response.writeMessageToOutputStream(dos);
+					
+				} else {
+					// 2. Encontrado. Lo leemos del disco duro
+					String fullHash = matches[0].fileHash;
+					String filePath = es.um.redes.nanoFiles.application.NanoFiles.db.lookupFilePath(fullHash);
+					java.io.File file = new java.io.File(filePath);
+					byte[] fileData = java.nio.file.Files.readAllBytes(file.toPath());
+
+					// 3. Montamos el mensaje con los datos y lo enviamos
+					PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_FILE_DATA);
+					response.setHash(fullHash);
+					response.setName(file.getName());
+					response.setSize(file.length());
+					response.setFileData(fileData);
+
+					response.writeMessageToOutputStream(dos);
+					System.out.println(" [*] Fichero '" + file.getName() + "' enviado exitosamente al cliente.");
+				}
+			}
+		} catch (Exception e) {
 			System.err.println("Error durante la comunicación con el cliente: " + e.getMessage());
 		} finally {
-			// [cite: 33, 56, 58] Cerramos el socket del cliente tras finalizar la atención
-			try {
-				socket.close();
-			} catch (IOException e) {
-				System.err.println("Error al cerrar el socket del cliente: " + e.getMessage());
-			}
+			try { socket.close(); } catch (IOException e) {}
 		}
 		/*
 		 * TODO: (Boletín SocketsTCP) Para servir un fichero, hay que localizarlo a

@@ -69,11 +69,53 @@ public class NFConnector {
 	}
 
 
+	public boolean downloadFile(String targetHashSubstring) {
+		boolean success = false;
+		try {
+			DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+			DataInputStream dis = new DataInputStream(socket.getInputStream());
 
+			System.out.println(" [->] Pidiendo al peer el fichero con hash: " + targetHashSubstring);
+
+			// 1. Enviar petición de descarga
+			PeerMessage request = new PeerMessage(PeerMessageOps.OPCODE_DOWNLOAD_REQ);
+			request.setHash(targetHashSubstring);
+			request.writeMessageToOutputStream(dos);
+
+			// 2. Esperar la respuesta
+			PeerMessage response = PeerMessage.readMessageFromInputStream(dis);
+
+			// 3. Evaluar qué nos ha respondido el servidor
+			if (response.getOpcode() == PeerMessageOps.OPCODE_FILE_DATA) {
+				String fileName = response.getName();
+				byte[] fileBytes = response.getFileData();
+
+				// Escribir los bytes en un archivo local
+				java.io.FileOutputStream fos = new java.io.FileOutputStream(fileName);
+				fos.write(fileBytes);
+				fos.close();
+
+				System.out.println(" [V] ¡Éxito! Fichero '" + fileName + "' descargado y guardado en tu carpeta.");
+				success = true;
+				
+			} else if (response.getOpcode() == PeerMessageOps.OPCODE_ERR_NOT_FOUND) {
+				System.err.println(" [X] Error: El servidor no tiene el fichero.");
+			} else if (response.getOpcode() == PeerMessageOps.OPCODE_ERR_AMBIGUOUS_HASH) {
+				System.err.println(" [X] Error: Hash ambiguo. Hay varios ficheros que empiezan así, introduce más caracteres.");
+			} else {
+				System.err.println(" [X] Error desconocido. Opcode devuelto: " + response.getOpcode());
+			}
+
+			socket.close();
+		} catch (IOException e) {
+			System.err.println("Error durante la descarga del fichero: " + e.getMessage());
+		}
+		return success;
+	}
 
 
 	public InetSocketAddress getServerAddr() {
 		return serverAddr;
 	}
-
+	
 }

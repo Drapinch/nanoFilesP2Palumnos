@@ -132,11 +132,15 @@ public class NFControllerLogicP2P {
 			String targetHashSubstring) {
 		// TODO: localizar peers con el hash solicitado (o uno concreto) y delegar en
 		// downloadFileFromServers
-		boolean success = false;
+		InetSocketAddress peerAddress = dirLogic.lookupUserAddress(targetPeerNickname); 
 
+		if (peerAddress == null) {
+			System.err.println("* Error: No se ha encontrado la IP del peer '" + targetPeerNickname + "'. ¿Le pediste la lista al directorio?");
+			return false;
+		}
 
-
-		return success;
+		InetSocketAddress[] serverList = new InetSocketAddress[] { peerAddress };
+		return downloadFileFromServers(serverList, targetHashSubstring);
 	}
 
 	/**
@@ -152,6 +156,16 @@ public class NFControllerLogicP2P {
 		if (serverAddressList.length == 0) {
 			System.err.println("* Cannot start download - No list of server addresses provided");
 			return false;
+		}
+
+		// Tomamos la IP del primer (y único) servidor de la lista para conectarnos
+		InetSocketAddress serverAddr = serverAddressList[0]; 
+		
+		try {
+			NFConnector connector = new NFConnector(serverAddr);
+			downloaded = connector.downloadFile(targetHashSubstring);
+		} catch (IOException e) {
+			System.err.println("Error al intentar conectar con el peer: " + e.getMessage());
 		}
 		// TODO: crear conectores TCP solo a los servidores que confirmen el hash
 		// pedido, obtener nombre remoto, reservar nombre local sin colisiones, alternar

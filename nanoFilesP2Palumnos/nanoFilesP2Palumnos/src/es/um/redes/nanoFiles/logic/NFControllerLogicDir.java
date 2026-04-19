@@ -208,5 +208,17 @@ public class NFControllerLogicDir {
 		}
 		return path.toString();
 	}
+	
+	public InetSocketAddress lookupUserAddress(String nickname) {
+		// 1. Pedimos al directorio el diccionario (Map) con todos los usuarios conectados
+		Map<String, InetSocketAddress> peerList = directoryConnector.getPeerList();
+		
+		// 2. Buscamos en el diccionario la dirección que corresponde a ese nickname
+		if (peerList != null && peerList.containsKey(nickname)) {
+			return peerList.get(nickname);
+		} else {
+			return null;
+		}
+	}
 
 }
