@@ -44,6 +44,28 @@ public class NFConnector {
 		 * TODO: (Boletín SocketsTCP) Enviar entero cualquiera a través del socket y
 		 * después recibir otro entero, comprobando que se trata del mismo valor.
 		 */
+		try {
+			// Creamos los canales de lectura y escritura a partir del socket
+			DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+			DataInputStream dis = new DataInputStream(socket.getInputStream());
+
+			System.out.println(" [->] Conectado al servidor. Enviando petición de prueba...");
+
+			// FASE 2: Creamos un mensaje simulando pedir un archivo y lo enviamos
+			PeerMessage request = new PeerMessage(PeerMessageOps.OPCODE_DOWNLOAD_REQ);
+			request.setHash("hash_inventado_de_prueba");
+			request.writeMessageToOutputStream(dos);
+
+			// FASE 2: Nos quedamos esperando la respuesta del servidor
+			PeerMessage response = PeerMessage.readMessageFromInputStream(dis);
+			System.out.println(" [<-] Cliente recibe respuesta del servidor con Opcode: " + response.getOpcode());
+
+			// Cerramos la conexión
+			socket.close();
+			
+		} catch (IOException e) {
+			System.err.println("Error en el cliente de pruebas: " + e.getMessage());
+		}
 	}
 
 

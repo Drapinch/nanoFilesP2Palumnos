@@ -5,10 +5,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import es.um.redes.nanoFiles.tcp.message.PeerMessage;
 import es.um.redes.nanoFiles.tcp.message.PeerMessageOps;
 
@@ -70,6 +67,7 @@ public class NFServer implements Runnable {
 			 * implementar en el método serveFilesToClient, al cual hay que pasarle el
 			 * socket devuelto por accept.
 			 */
+			serveFilesToClient(clientSocket);
 		} catch (IOException e) {
 			System.err.println("Error al aceptar conexión de cliente: " + e.getMessage());
 			// El bucle continúa para que el servidor no se detenga por un error puntual
