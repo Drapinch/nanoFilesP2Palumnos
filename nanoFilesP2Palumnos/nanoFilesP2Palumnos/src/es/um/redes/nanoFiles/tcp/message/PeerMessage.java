@@ -18,10 +18,13 @@ public class PeerMessage {
 	 * específicos para crear mensajes con otros campos, según sea necesario
 	 * 
 	 */
-
-
-
-
+	
+	private String hash;         // Hash solicitado o devuelto
+	private String name;         // Nombre original del fichero
+	private long size;           // Tamaño del fichero o del fragmento
+	private byte[] fileData;
+	private String fileList;
+	
 	public PeerMessage() {
 		opcode = PeerMessageOps.OPCODE_INVALID_CODE;
 	}
@@ -39,7 +42,47 @@ public class PeerMessage {
 	public byte getOpcode() {
 		return opcode;
 	}
+	
+	public String getHash() {
+		return hash;
+	}
 
+	public void setHash(String hash) {
+		// Opcional: Comprobar que el opcode tiene sentido para este dato
+		this.hash = hash;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public long getSize() {
+		return size;
+	}
+
+	public void setSize(long size) {
+		this.size = size;
+	}
+
+	public byte[] getFileData() {
+		return fileData;
+	}
+
+	public void setFileData(byte[] fileData) {
+		this.fileData = fileData;
+	}
+
+	public String getFileList() {
+		return fileList;
+	}
+
+	public void setFileList(String fileList) {
+		this.fileList = fileList;
+	}
 
 
 
@@ -66,7 +109,34 @@ public class PeerMessage {
 		byte opcode = dis.readByte();
 		switch (opcode) {
 
+		case PeerMessageOps.OPCODE_FILELIST_REQ:
+		case PeerMessageOps.OPCODE_ERR_NOT_FOUND:
+		case PeerMessageOps.OPCODE_ERR_AMBIGUOUS_HASH:
+			// TODO: Formato "Control". No hay más campos que leer.
+			break;
 
+		case PeerMessageOps.OPCODE_DOWNLOAD_REQ:
+			// TODO: Leer el string del hash enviado por el cliente
+			String requestedHash = dis.readUTF();
+			message.setHash(requestedHash);
+			break;
+
+		case PeerMessageOps.OPCODE_FILE_DATA:
+			// TODO: Leer los datos del fichero que nos envía el servidor
+			// Respetar el orden del writeMessageToOutputStream:
+			message.setHash(dis.readUTF());       // 1. Leemos el hash
+			message.setName(dis.readUTF());       // 2. Leemos el nombre
+			
+			long dataSize = dis.readLong();       // 3. Leemos el tamaño
+			message.setSize(dataSize);
+			
+			// 4. Preparamos el array y leemos los bytes exactos
+			byte[] data = new byte[(int) dataSize];
+			dis.readFully(data);                  // Muy importante usar readFully para binario
+			message.setFileData(data);
+			break;
+			
+		// TODO: Añadir case para OPCODE_FILELIST_RESP
 
 		default:
 			System.err.println("PeerMessage.readMessageFromInputStream doesn't know how to parse this message opcode: "
@@ -87,14 +157,34 @@ public class PeerMessage {
 
 		dos.writeByte(opcode);
 		switch (opcode) {
+		case PeerMessageOps.OPCODE_FILELIST_REQ:
+		case PeerMessageOps.OPCODE_ERR_NOT_FOUND:
+		case PeerMessageOps.OPCODE_ERR_AMBIGUOUS_HASH:
+			// TODO: Estos mensajes son de formato "Control" (Solo opcode). 
+			// No hay que enviar nada más.
+			break;
 
+		case PeerMessageOps.OPCODE_DOWNLOAD_REQ:
+			// TODO: El cliente envía el hash que quiere descargar.
+			// dos.writeUTF(...) facilita el envío de Strings.
+			dos.writeUTF(hash);
+			break;
 
-
+		case PeerMessageOps.OPCODE_FILE_DATA:
+			// TODO: El servidor envía los datos del fichero.
+			// ¡El orden en el que escribes aquí debe ser EXACTAMENTE el mismo
+			// en el que lees en el readMessageFromInputStream!
+			dos.writeUTF(hash);       // 1. Mandamos el hash original
+			dos.writeUTF(name);       // 2. Mandamos el nombre
+			dos.writeLong(size);      // 3. Mandamos cuántos bytes ocupan los datos
+			dos.write(fileData);      // 4. Mandamos el array de bytes con el contenido
+			break;
 
 		default:
 			System.err.println("PeerMessage.writeMessageToOutputStream found unexpected message opcode " + opcode + "("
 					+ PeerMessageOps.opcodeToOperation(opcode) + ")");
 		}
+		dos.flush();
 	}
 
 

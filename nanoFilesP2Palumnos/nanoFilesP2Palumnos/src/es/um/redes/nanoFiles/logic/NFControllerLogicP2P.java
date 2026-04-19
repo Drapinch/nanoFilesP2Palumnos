@@ -94,8 +94,13 @@ public class NFControllerLogicP2P {
 		 */
 
 		try {
-			NFConnector nfConnector = new NFConnector(new InetSocketAddress(NFServer.PORT));
-			nfConnector.test();
+			InetSocketAddress testServerAddress = new InetSocketAddress("localhost", 10000);
+			System.out.println("Iniciando cliente TCP de prueba hacia " + testServerAddress);
+			
+			//NFConnector nfConnector = new NFConnector(new InetSocketAddress(NFServer.PORT));
+			NFConnector connector = new NFConnector(testServerAddress);
+			//nfConnector.test();
+			connector.test();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

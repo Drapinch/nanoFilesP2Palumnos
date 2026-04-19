@@ -27,6 +27,8 @@ public class NFConnector {
 		 * servidor (IP, puerto). La creación exitosa del socket significa que la
 		 * conexión TCP ha sido establecida.
 		 */
+		this.serverAddr = serverAddr;
+		this.socket = new Socket(serverAddr.getAddress(), serverAddr.getPort());
 		/*
 		 * TODO: (Boletín SocketsTCP) Se crean los DataInputStream/DataOutputStream a
 		 * partir de los streams de entrada/salida del socket creado. Se usarán para

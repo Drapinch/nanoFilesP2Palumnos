@@ -3,6 +3,14 @@ package es.um.redes.nanoFiles.tcp.server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import es.um.redes.nanoFiles.tcp.message.PeerMessage;
+import es.um.redes.nanoFiles.tcp.message.PeerMessageOps;
 
 
 
@@ -13,13 +21,15 @@ public class NFServer implements Runnable {
 
 
 
-	private ServerSocket serverSocket = null;
+	private ServerSocket serverSocket;
 
 	public NFServer() throws IOException {
 		/*
 		 * TODO: (Boletín SocketsTCP) Crear una direción de socket a partir del puerto
 		 * especificado (PORT)
 		 */
+		serverSocket = new ServerSocket();
+		serverSocket.bind(new InetSocketAddress(PORT));
 		/*
 		 * TODO: (Boletín SocketsTCP) Crear un socket servidor y ligarlo a la dirección
 		 * de socket anterior
@@ -46,19 +56,24 @@ public class NFServer implements Runnable {
 		}
 
 		while (true) {
+			try {
 			/*
 			 * TODO: (Boletín SocketsTCP) Usar el socket servidor para esperar conexiones de
 			 * otros peers que soliciten descargar ficheros.
 			 */
+			System.out.println(" [*] Servidor TCP de prueba escuchando en el puerto " + PORT);
+			Socket clientSocket = serverSocket.accept();
+			System.out.println(" [*] ¡Cliente conectado desde: " + clientSocket.getInetAddress() + "!");
 			/*
 			 * TODO: (Boletín SocketsTCP) Tras aceptar la conexión con un peer cliente, la
 			 * comunicación con dicho cliente para servir los ficheros solicitados se debe
 			 * implementar en el método serveFilesToClient, al cual hay que pasarle el
 			 * socket devuelto por accept.
 			 */
-
-
-
+		} catch (IOException e) {
+			System.err.println("Error al aceptar conexión de cliente: " + e.getMessage());
+			// El bucle continúa para que el servidor no se detenga por un error puntual
+		}
 		}
 	}
 
@@ -112,12 +127,34 @@ public class NFServer implements Runnable {
 		/*
 		 * TODO: (Boletín SocketsTCP) Crear dis/dos a partir del socket
 		 */
+		try (
+				// Usamos try-with-resources para asegurar que los canales se cierran al terminar [cite: 100, 106]
+				DataInputStream dis = new DataInputStream(socket.getInputStream());
+				DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+			) {
 		/*
 		 * TODO: (Boletín SocketsTCP) Mientras el cliente esté conectado, leer mensajes
 		 * de socket, convertirlo a un objeto PeerMessage y luego actuar en función del
 		 * tipo de mensaje recibido, enviando los correspondientes mensajes de
 		 * respuesta.
 		 */
+			PeerMessage request = PeerMessage.readMessageFromInputStream(dis);
+			System.out.println(" [*] Servidor recibe petición con Opcode: " + request.getOpcode());
+			
+			PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_ERR_NOT_FOUND);
+			response.writeMessageToOutputStream(dos);
+			System.out.println(" [*] Servidor envía respuesta de error.");
+		
+		} catch (IOException e) {
+			System.err.println("Error durante la comunicación con el cliente: " + e.getMessage());
+		} finally {
+			// [cite: 33, 56, 58] Cerramos el socket del cliente tras finalizar la atención
+			try {
+				socket.close();
+			} catch (IOException e) {
+				System.err.println("Error al cerrar el socket del cliente: " + e.getMessage());
+			}
+		}
 		/*
 		 * TODO: (Boletín SocketsTCP) Para servir un fichero, hay que localizarlo a
 		 * partir de su hash (o subcadena) en nuestra base de datos de ficheros

@@ -6,12 +6,23 @@ import java.util.TreeMap;
 public class PeerMessageOps {
 
 	public static final byte OPCODE_INVALID_CODE = 0;
+	// ---- Peticiones del Cliente al Servidor ----
+	public static final byte OPCODE_FILELIST_REQ = 1;     // Solicita lista de ficheros
+	public static final byte OPCODE_DOWNLOAD_REQ = 2;     // Solicita un fichero por su hash
 
+	// ---- Respuestas del Servidor al Cliente (Éxito) ----
+	public static final byte OPCODE_FILELIST_RESP = 11;   // Devuelve la lista de ficheros
+	public static final byte OPCODE_FILE_DATA = 12;       // Devuelve los datos de un fichero
+
+	// ---- Respuestas del Servidor al Cliente (Errores) ----
+	public static final byte OPCODE_ERR_NOT_FOUND = 21;       // Fichero no encontrado
+	public static final byte OPCODE_ERR_AMBIGUOUS_HASH = 22;  // Hash corto coincide con varios ficheros
 	/*
 	 * TODO: (Boletín MensajesBinarios) Añadir aquí todas las constantes que definen
 	 * los diferentes tipos de mensajes del protocolo de comunicación con un par
 	 * servidor de ficheros (valores posibles del campo "operation").
 	 */
+	
 
 
 
