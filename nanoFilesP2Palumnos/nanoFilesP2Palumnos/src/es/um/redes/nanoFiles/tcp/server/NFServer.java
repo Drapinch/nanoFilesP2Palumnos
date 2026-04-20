@@ -100,18 +100,50 @@ public class NFServer implements Runnable {
 		 * hilo es el que se encarga de atender al cliente conectado, no podremos tener
 		 * más de un cliente conectado a este servidor.
 		 */
-
-
-
-
+		System.out.println(" [*] Servidor TCP CONCURRENTE escuchando en el puerto " + PORT);
+		
+		while (!serverSocket.isClosed()){
+			try {
+				Socket clientSocket = serverSocket.accept();
+				System.out.println(" [*] ¡Nueva conexión aceptada desde: " + clientSocket.getInetAddress() + "!");
+				
+				// Creamos un hilo nuevo para atender a este cliente
+				NFServerThread workerThread = new NFServerThread(clientSocket);
+				workerThread.start(); // Esto llama al run() del NFServerThread
+				
+			} catch (java.io.IOException e) {
+				// Si el error salta porque hemos cerrado el socket aposta, lo ignoramos
+				if (!serverSocket.isClosed()) {
+					System.err.println("Error al aceptar conexión de cliente: " + e.getMessage());
+				}
+			}
+		}
+		System.out.println(" [*] Servidor TCP apagado.");
 	}
 	/*
 	 * TODO: (Boletín SocketsTCP) Añadir métodos a esta clase para: 1) Arrancar el
 	 * servidor en un hilo nuevo que se ejecutará en segundo plano 2) Detener el
 	 * servidor (stopserver) 3) Obtener el puerto de escucha del servidor etc.
 	 */
+	
+	private Thread serverBackgroundThread;
+	
+	public void startServer() {
+		// Arrancamos esta misma clase (que implementa Runnable) en un hilo aparte
+		serverBackgroundThread = new Thread(this);
+		serverBackgroundThread.start();
+	}
 
-
+	public void stopServer() {
+		try {
+			// Si cerramos el socket, el bucle while del run() se romperá automáticamente
+			if (serverSocket != null && !serverSocket.isClosed()) {
+				serverSocket.close();
+			}
+		} catch (java.io.IOException e) {
+			System.err.println("Error apagando el servidor: " + e.getMessage());
+		}
+	}
 
 
 	/**

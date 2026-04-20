@@ -152,7 +152,7 @@ public class NFController {
 			if (NanoFiles.testModeTCP) {
 				controllerPeer.testTCPServer();
 			} else {
-				boolean serverRunning = controllerPeer.startFileServer();
+				boolean serverRunning = controllerPeer.startFileServer(controllerDir);
 				if (serverRunning) {
 					commandSucceeded = controllerDir.registerFileServer(controllerPeer.getServerPort());
 				} else {
@@ -176,7 +176,7 @@ public class NFController {
 			 * unregisterFileServer).
 			 */
 			if (controllerPeer.serving()) {
-				controllerPeer.stopFileServer();
+				controllerPeer.stopFileServer(controllerDir);
 				commandSucceeded = controllerDir.unregisterFileServer();
 			}
 			break;

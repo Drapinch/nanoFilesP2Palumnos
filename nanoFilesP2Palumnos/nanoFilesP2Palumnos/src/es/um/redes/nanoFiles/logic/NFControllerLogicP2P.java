@@ -12,7 +12,7 @@ import es.um.redes.nanoFiles.tcp.server.NFServer;
 public class NFControllerLogicP2P {
 	// Servidor TCP local para compartir ficheros con otros peers
 	private NFServer fileServer = null;
-
+	private NFServer backgroundServer = null;
 
 
 	protected NFControllerLogicP2P() {
@@ -26,7 +26,7 @@ public class NFControllerLogicP2P {
 	 *         ficheros, y está a la escucha en un puerto, falso en caso contrario.
 	 * 
 	 */
-	protected boolean startFileServer() {
+	protected boolean startFileServer(NFControllerLogicDir dirLogic) {
 		boolean serverRunning = false;
 		/*
 		 * Comprobar que no existe ya un objeto NFServer previamente creado, en cuyo
@@ -45,6 +45,39 @@ public class NFControllerLogicP2P {
 			 * programa
 			 * 
 			 */
+			try {
+				// 1. Instanciamos el servidor (abre el ServerSocket)
+				fileServer = new NFServer();
+				
+				// 2. Comprobamos que el puerto sea válido antes de seguir
+				if (NFServer.PORT > 0) {
+					// 3. Arrancamos el servidor en un hilo nuevo (segundo plano)
+					fileServer.startServer();
+					
+					// 4. Informamos por pantalla
+					System.out.println("* File server started in background, listening on port " + NFServer.PORT);
+					
+					// 5. Registramos nuestro servidor en el directorio para que otros nos vean
+					if (dirLogic.registerFileServer(NFServer.PORT)) {
+						serverRunning = true;
+					} else {
+						System.err.println("* Error: Could not register file server in the directory.");
+						// Si falla el registro, detenemos el servidor para limpiar recursos
+						fileServer.stopServer();
+						fileServer = null;
+					}
+				} else {
+					System.err.println("* Error: Invalid port configuration (" + NFServer.PORT + ")");
+				}
+				
+			} catch (java.io.IOException e) {
+				/*
+				 * Capturamos excepciones de E/S (ej. puerto 10000 ya en uso)
+				 * Informamos al usuario sin abortar el programa principal.
+				 */
+				System.err.println("* Critical error starting file server: " + e.getMessage());
+				fileServer = null; // Nos aseguramos de que quede a null para poder reintentar
+			}
 
 
 
@@ -206,13 +239,22 @@ public class NFControllerLogicP2P {
 	 * Método para detener nuestro servidor de ficheros en segundo plano
 	 * 
 	 */
-	protected void stopFileServer() {
+	protected void stopFileServer(NFControllerLogicDir dirLogic) {
 		/*
 		 * TODO: Enviar señal para detener nuestro servidor de ficheros en segundo plano
 		 */
-
-
-
+		if (backgroundServer != null) {
+			// 1. Detenemos el hilo y cerramos el socket
+			backgroundServer.stopServer();
+			backgroundServer = null;
+			
+			// 2. Nos damos de baja en el directorio
+			dirLogic.unregisterFileServer();
+			
+			System.out.println("* Servidor detenido. Ya no compartes ficheros.");
+		} else {
+			System.out.println("* El servidor no estaba ejecutándose.");
+		}
 	}
 
 	protected boolean serving() {

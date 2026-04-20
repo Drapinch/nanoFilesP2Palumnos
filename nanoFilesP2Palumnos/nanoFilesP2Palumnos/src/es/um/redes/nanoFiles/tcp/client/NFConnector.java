@@ -89,14 +89,25 @@ public class NFConnector {
 			if (response.getOpcode() == PeerMessageOps.OPCODE_FILE_DATA) {
 				String fileName = response.getName();
 				byte[] fileBytes = response.getFileData();
+				String serverHash = response.getHash(); // El hash que dice el servidor que tiene el fichero
 
-				// Escribir los bytes en un archivo local
-				java.io.FileOutputStream fos = new java.io.FileOutputStream(fileName);
-				fos.write(fileBytes);
-				fos.close();
+				// 1. MEJORA: Evitar colisiones de nombres de fichero
+				java.nio.file.Path safePath = es.um.redes.nanoFiles.util.FileNameUtil.chooseAvailableName(fileName);
 
-				System.out.println(" [V] ¡Éxito! Fichero '" + fileName + "' descargado y guardado en tu carpeta.");
-				success = true;
+				// Escribir los bytes en el disco
+				java.nio.file.Files.write(safePath, fileBytes);
+
+				// 2. MEJORA: Comprobar la integridad (Verificar el hash final)
+				String localHash = es.um.redes.nanoFiles.util.FileDigest.computeFileChecksumString(safePath.toString());
+
+				if (localHash.equals(serverHash)) {
+					System.out.println(" [V] ¡Éxito! Fichero guardado como '" + safePath.getFileName() + "'. Integridad 100% verificada.");
+					success = true;
+				} else {
+					System.err.println(" [X] ¡Error de Integridad! El fichero se ha descargado pero está corrupto (Los hashes no coinciden).");
+					// Si está corrupto, lo más seguro es borrarlo
+					java.nio.file.Files.deleteIfExists(safePath);
+				}
 				
 			} else if (response.getOpcode() == PeerMessageOps.OPCODE_ERR_NOT_FOUND) {
 				System.err.println(" [X] Error: El servidor no tiene el fichero.");
