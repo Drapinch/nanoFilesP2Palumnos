@@ -4,16 +4,11 @@ import java.net.InetSocketAddress;
 import java.io.IOException;
 import es.um.redes.nanoFiles.tcp.client.NFConnector;
 import es.um.redes.nanoFiles.application.NanoFiles;
-
-
-
 import es.um.redes.nanoFiles.tcp.server.NFServer;
 
 public class NFControllerLogicP2P {
 	// Servidor TCP local para compartir ficheros con otros peers
 	private NFServer fileServer = null;
-	private NFServer backgroundServer = null;
-
 
 	protected NFControllerLogicP2P() {
 	}
@@ -21,11 +16,9 @@ public class NFControllerLogicP2P {
 	/**
 	 * Método para ejecutar un servidor de ficheros en segundo plano. Debe arrancar
 	 * el servidor en un nuevo hilo creado a tal efecto.
-	 * 
-	 * @return Verdadero si se ha arrancado en un nuevo hilo con el servidor de
-	 *         ficheros, y está a la escucha en un puerto, falso en caso contrario.
-	 * 
-	 */
+	 * * @return Verdadero si se ha arrancado en un nuevo hilo con el servidor de
+	 * ficheros, y está a la escucha en un puerto, falso en caso contrario.
+	 * */
 	protected boolean startFileServer(NFControllerLogicDir dirLogic) {
 		boolean serverRunning = false;
 		/*
@@ -36,29 +29,26 @@ public class NFControllerLogicP2P {
 			System.err.println("File server is already running");
 		} else {
 			/*
-			 * TODO: (Boletín Servidor TCP concurrente) Arrancar servidor en segundo plano
-			 * creando un nuevo hilo, comprobar que el servidor está escuchando en un puerto
-			 * válido (>0), imprimir mensaje informando sobre el puerto de escucha, y
-			 * devolver verdadero. Las excepciones que puedan lanzarse deben ser capturadas
-			 * y tratadas en este método. Si se produce una excepción de entrada/salida
-			 * (error del que no es posible recuperarse), se debe informar sin abortar el
-			 * programa
-			 * 
+			 * Arrancar servidor en segundo plano creando un nuevo hilo, comprobar que el 
+			 * servidor está escuchando en un puerto válido (>0), imprimir mensaje 
+			 * informando sobre el puerto de escucha, y devolver verdadero.
 			 */
 			try {
 				// 1. Instanciamos el servidor (abre el ServerSocket)
 				fileServer = new NFServer();
 				
 				// 2. Comprobamos que el puerto sea válido antes de seguir
-				if (NFServer.PORT > 0) {
+				int port = NFServer.PORT; // Asumiendo que el puerto está en esta constante estática
+				
+				if (port > 0) {
 					// 3. Arrancamos el servidor en un hilo nuevo (segundo plano)
 					fileServer.startServer();
 					
 					// 4. Informamos por pantalla
-					System.out.println("* File server started in background, listening on port " + NFServer.PORT);
+					System.out.println("* File server started in background, listening on port " + port);
 					
 					// 5. Registramos nuestro servidor en el directorio para que otros nos vean
-					if (dirLogic.registerFileServer(NFServer.PORT)) {
+					if (dirLogic.registerFileServer(port)) {
 						serverRunning = true;
 					} else {
 						System.err.println("* Error: Could not register file server in the directory.");
@@ -67,24 +57,20 @@ public class NFControllerLogicP2P {
 						fileServer = null;
 					}
 				} else {
-					System.err.println("* Error: Invalid port configuration (" + NFServer.PORT + ")");
+					System.err.println("* Error: Invalid port configuration (" + port + ")");
+					fileServer = null;
 				}
 				
 			} catch (java.io.IOException e) {
 				/*
-				 * Capturamos excepciones de E/S (ej. puerto 10000 ya en uso)
+				 * Capturamos excepciones de E/S (ej. puerto ya en uso)
 				 * Informamos al usuario sin abortar el programa principal.
 				 */
 				System.err.println("* Critical error starting file server: " + e.getMessage());
 				fileServer = null; // Nos aseguramos de que quede a null para poder reintentar
 			}
-
-
-
-
 		}
 		return serverRunning;
-
 	}
 
 	protected void testTCPServer() {
@@ -130,12 +116,9 @@ public class NFControllerLogicP2P {
 			InetSocketAddress testServerAddress = new InetSocketAddress("localhost", 10000);
 			System.out.println("Iniciando cliente TCP de prueba hacia " + testServerAddress);
 			
-			//NFConnector nfConnector = new NFConnector(new InetSocketAddress(NFServer.PORT));
 			NFConnector connector = new NFConnector(testServerAddress);
-			//nfConnector.test();
 			connector.test();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -143,16 +126,27 @@ public class NFControllerLogicP2P {
 	/**
 	 * Método para listar los ficheros de un peer concreto vía TCP e imprimirlos por
 	 * pantalla.
-	 * 
-	 * @param La dirección del peer cuyos ficheros se quiere listar
-	 * @return Verdadero si se ha obtenido exitosamente el listado de fichero del
-	 *         peer
+	 * * @param peerAddr La dirección del peer cuyos ficheros se quiere listar
+	 * @return Verdadero si se ha obtenido exitosamente el listado de ficheros del peer
 	 */
 	protected boolean listPeerFiles(InetSocketAddress peerAddr) {
 		boolean success = false;
-
-
-
+		try {
+			// Nos conectamos al peer específico
+			NFConnector connector = new NFConnector(peerAddr);
+			// Solicitamos y mostramos la lista de ficheros (Asumiendo método en NFConnector)
+			System.out.println("* Requesting file list from " + peerAddr);
+			
+			/*
+			 * Nota: el método exacto dependerá de tu NFConnector,
+			 * si devuelve un array de FileInfo o simplemente los imprime y devuelve boolean.
+			 * Generalmente se usa algo como getFileList()
+			 */
+			success = connector.getPeerFileList(); 
+			
+		} catch (IOException e) {
+			System.err.println("* Error: No se pudo conectar al peer " + peerAddr + " - " + e.getMessage());
+		}
 		return success;
 	}
 
@@ -161,51 +155,64 @@ public class NFControllerLogicP2P {
 	 * peers. Si se pasa "*" como nickname, usa el directorio para localizar los
 	 * peers que tienen el hash.
 	 */
-	protected boolean downloadFromPeers(NFControllerLogicDir dirLogic, String targetPeerNickname,
-			String targetHashSubstring) {
-		// TODO: localizar peers con el hash solicitado (o uno concreto) y delegar en
-		// downloadFileFromServers
-		InetSocketAddress peerAddress = dirLogic.lookupUserAddress(targetPeerNickname); 
+	protected boolean downloadFromPeers(NFControllerLogicDir dirLogic, String targetPeerNickname, String targetHashSubstring) {
+		InetSocketAddress[] serverList = null;
 
-		if (peerAddress == null) {
-			System.err.println("* Error: No se ha encontrado la IP del peer '" + targetPeerNickname + "'. ¿Le pediste la lista al directorio?");
+		if (targetPeerNickname.equals("*")) {
+			// Lógica para descargar desde cualquier/todos los peers que tengan el archivo
+			// (Depende de si tu dirLogic tiene un método para buscar IPs por hash de archivo)
+			// serverList = dirLogic.lookupServersSharingFile(targetHashSubstring);
+			System.err.println("* Descarga desde múltiples fuentes (*) pendiente de implementación en el Directorio");
 			return false;
+		} else {
+			// Lógica para descargar desde un peer concreto
+			InetSocketAddress peerAddress = dirLogic.lookupUserAddress(targetPeerNickname); 
+
+			if (peerAddress == null) {
+				System.err.println("* Error: No se ha encontrado la IP del peer '" + targetPeerNickname + "'. ¿Le pediste la lista al directorio?");
+				return false;
+			}
+			serverList = new InetSocketAddress[] { peerAddress };
 		}
 
-		InetSocketAddress[] serverList = new InetSocketAddress[] { peerAddress };
 		return downloadFileFromServers(serverList, targetHashSubstring);
 	}
 
 	/**
 	 * Método para descargar un fichero del peer servidor de ficheros
-	 * 
-	 * @param serverAddressList   La lista de direcciones de los servidores a los
-	 *                            que se conectará
+	 * * @param serverAddressList   La lista de direcciones de los servidores a los
+	 * que se conectará
 	 * @param targetHashSubstring Subcadena del hash del fichero a descargar
 	 */
 	protected boolean downloadFileFromServers(InetSocketAddress[] serverAddressList, String targetHashSubstring) {
 		boolean downloaded = false;
 
-		if (serverAddressList.length == 0) {
+		if (serverAddressList == null || serverAddressList.length == 0) {
 			System.err.println("* Cannot start download - No list of server addresses provided");
 			return false;
 		}
 
-		// Tomamos la IP del primer (y único) servidor de la lista para conectarnos
-		InetSocketAddress serverAddr = serverAddressList[0]; 
-		
-		try {
-			NFConnector connector = new NFConnector(serverAddr);
-			downloaded = connector.downloadFile(targetHashSubstring);
-		} catch (IOException e) {
-			System.err.println("Error al intentar conectar con el peer: " + e.getMessage());
+		// Recorremos la lista de servidores hasta que alguno nos pueda enviar el fichero
+		// TODO Avanzado: Crear lógica para descargar a trozos (chunks) de múltiples servidores.
+		for (InetSocketAddress serverAddr : serverAddressList) {
+			try {
+				System.out.println("* Intentando descargar desde el servidor: " + serverAddr);
+				NFConnector connector = new NFConnector(serverAddr);
+				
+				// Intentamos la descarga (El conector debería encargarse de verificar el hash final internamente)
+				downloaded = connector.downloadFile(targetHashSubstring);
+				
+				if (downloaded) {
+					System.out.println("* Descarga completada con éxito desde " + serverAddr);
+					break; // Si logramos descargar el archivo, salimos del bucle
+				} else {
+					System.err.println("* El servidor " + serverAddr + " no pudo proporcionar el fichero completo.");
+				}
+				
+			} catch (IOException e) {
+				System.err.println("* Error de conexión con el servidor " + serverAddr + ": " + e.getMessage());
+			}
 		}
-		// TODO: crear conectores TCP solo a los servidores que confirmen el hash
-		// pedido, obtener nombre remoto, reservar nombre local sin colisiones, alternar
-		// descarga de chunks y verificar hash final. Cerrar los sockets al terminar.
-
-
-
 
 		return downloaded;
 	}
@@ -221,32 +228,29 @@ public class NFControllerLogicP2P {
 
 	/**
 	 * Método para obtener el puerto de escucha de nuestro servidor de ficheros
-	 * 
-	 * @return El puerto en el que escucha el servidor, o 0 en caso de error.
+	 * * @return El puerto en el que escucha el servidor, o 0 en caso de error.
 	 */
 	protected int getServerPort() {
 		int port = 0;
-		/*
-		 * TODO: Devolver el puerto de escucha de nuestro servidor de ficheros
-		 */
-
-
-
+		if (fileServer != null) {
+			// Se asume que NFServer usa la constante estática PORT, o un getter equivalente
+			port = NFServer.PORT; 
+		}
 		return port;
 	}
 
 	/**
 	 * Método para detener nuestro servidor de ficheros en segundo plano
-	 * 
-	 */
+	 * */
 	protected void stopFileServer(NFControllerLogicDir dirLogic) {
 		/*
-		 * TODO: Enviar señal para detener nuestro servidor de ficheros en segundo plano
+		 * Enviar señal para detener nuestro servidor de ficheros en segundo plano
+		 * y unregister en el directorio.
 		 */
-		if (backgroundServer != null) {
+		if (fileServer != null) { // Cambiado de backgroundServer a fileServer para mantener consistencia
 			// 1. Detenemos el hilo y cerramos el socket
-			backgroundServer.stopServer();
-			backgroundServer = null;
+			fileServer.stopServer();
+			fileServer = null;
 			
 			// 2. Nos damos de baja en el directorio
 			dirLogic.unregisterFileServer();
@@ -258,12 +262,8 @@ public class NFControllerLogicP2P {
 	}
 
 	protected boolean serving() {
-		boolean result = false;
-
-
-
-		return result;
-
+		// Estamos sirviendo ficheros si la instancia de nuestro servidor no es nula
+		return fileServer != null;
 	}
 
 }

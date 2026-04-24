@@ -129,4 +129,32 @@ public class NFConnector {
 		return serverAddr;
 	}
 	
+	public boolean getPeerFileList() {
+		boolean success = false;
+		try {
+			DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+			DataInputStream dis = new DataInputStream(socket.getInputStream());
+
+			// 1. Enviar la petición
+			PeerMessage request = new PeerMessage(PeerMessageOps.OPCODE_FILELIST_REQ);
+			request.writeMessageToOutputStream(dos);
+
+			// 2. Leer la respuesta
+			PeerMessage response = PeerMessage.readMessageFromInputStream(dis);
+
+			if (response.getOpcode() == PeerMessageOps.OPCODE_FILELIST_RESP) {
+				System.out.println("\n--- Ficheros del Peer ---");
+				// Imprimir el String que nos ha mandado el servidor
+				System.out.println(response.getFileList());
+				System.out.println("-------------------------");
+				success = true;
+			} else {
+				System.err.println(" [X] Respuesta inesperada del peer: " + response.getOpcode());
+			}
+			socket.close();
+		} catch (java.io.IOException e) {
+			System.err.println("Error al obtener la lista de ficheros: " + e.getMessage());
+		}
+		return success;
+	}
 }

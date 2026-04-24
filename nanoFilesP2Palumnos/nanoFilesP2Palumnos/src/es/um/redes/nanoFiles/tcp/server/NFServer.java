@@ -206,6 +206,24 @@ public class NFServer implements Runnable {
 					System.out.println(" [*] Fichero '" + file.getName() + "' enviado exitosamente al cliente.");
 				}
 			}
+			else if (request.getOpcode() == PeerMessageOps.OPCODE_FILELIST_REQ) {
+			    // 1. Obtener la lista de ficheros que comparte este servidor
+			    es.um.redes.nanoFiles.util.FileInfo[] files = es.um.redes.nanoFiles.application.NanoFiles.db.getFiles();
+			    
+			    // 2. Convertir esa lista a un String gigante formateado (puedes usar un StringBuilder)
+			    StringBuilder sb = new StringBuilder();
+			    for (es.um.redes.nanoFiles.util.FileInfo f : files) {
+			        sb.append(f.fileHash).append(" - ").append(f.fileName).append(" (").append(f.fileSize).append(" bytes)\n");
+			    }
+			    
+			    // 3. Crear el mensaje de respuesta y enviarlo
+			    PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_FILELIST_RESP);
+			    // Asumiendo que tu PeerMessage tiene un setFileList(String)
+			    response.setFileList(sb.toString()); 
+			    response.writeMessageToOutputStream(dos);
+			    
+			    System.out.println(" [*] Enviada lista de ficheros al cliente.");
+			}
 		} catch (Exception e) {
 			System.err.println("Error durante la comunicación con el cliente: " + e.getMessage());
 		} finally {
