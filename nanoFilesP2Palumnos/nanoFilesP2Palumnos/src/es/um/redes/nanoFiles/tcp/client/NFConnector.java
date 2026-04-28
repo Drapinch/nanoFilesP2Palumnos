@@ -7,10 +7,14 @@ import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import es.um.redes.nanoFiles.tcp.message.PeerMessage;
 import es.um.redes.nanoFiles.tcp.message.PeerMessageOps;
+import es.um.redes.nanoFiles.util.FileDigest;
 import es.um.redes.nanoFiles.util.FileInfo;
+import es.um.redes.nanoFiles.util.FileNameUtil;
 
 //Esta clase proporciona la funcionalidad necesaria para intercambiar mensajes entre el cliente y el servidor
 public class NFConnector {
@@ -92,13 +96,13 @@ public class NFConnector {
 				String serverHash = response.getHash(); // El hash que dice el servidor que tiene el fichero
 
 				// 1. MEJORA: Evitar colisiones de nombres de fichero
-				java.nio.file.Path safePath = es.um.redes.nanoFiles.util.FileNameUtil.chooseAvailableName(fileName);
+				Path safePath = FileNameUtil.chooseAvailableName(fileName);
 
 				// Escribir los bytes en el disco
-				java.nio.file.Files.write(safePath, fileBytes);
+				Files.write(safePath, fileBytes);
 
 				// 2. MEJORA: Comprobar la integridad (Verificar el hash final)
-				String localHash = es.um.redes.nanoFiles.util.FileDigest.computeFileChecksumString(safePath.toString());
+				String localHash = FileDigest.computeFileChecksumString(safePath.toString());
 
 				if (localHash.equals(serverHash)) {
 					System.out.println(" [V] ¡Éxito! Fichero guardado como '" + safePath.getFileName() + "'. Integridad 100% verificada.");

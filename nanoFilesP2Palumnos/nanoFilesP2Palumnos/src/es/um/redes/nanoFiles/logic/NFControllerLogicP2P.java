@@ -34,31 +34,21 @@ public class NFControllerLogicP2P {
 			 * informando sobre el puerto de escucha, y devolver verdadero.
 			 */
 			try {
-				// 1. Instanciamos el servidor (abre el ServerSocket)
 				fileServer = new NFServer();
-				
-				// 2. Comprobamos que el puerto sea válido antes de seguir
-				int port = NFServer.PORT; // Asumiendo que el puerto está en esta constante estática
-				
-				if (port > 0) {
-					// 3. Arrancamos el servidor en un hilo nuevo (segundo plano)
+				if (NFServer.PORT > 0) {
 					fileServer.startServer();
+					System.out.println("* File server started in background, listening on port " + NFServer.PORT);
 					
-					// 4. Informamos por pantalla
-					System.out.println("* File server started in background, listening on port " + port);
-					
-					// 5. Registramos nuestro servidor en el directorio para que otros nos vean
-					if (dirLogic.registerFileServer(port)) {
+					// Registrar en el directorio
+					if (dirLogic.registerFileServer(NFServer.PORT)) {
 						serverRunning = true;
 					} else {
 						System.err.println("* Error: Could not register file server in the directory.");
-						// Si falla el registro, detenemos el servidor para limpiar recursos
 						fileServer.stopServer();
 						fileServer = null;
 					}
 				} else {
-					System.err.println("* Error: Invalid port configuration (" + port + ")");
-					fileServer = null;
+					System.err.println("* Error: Invalid port configuration.");
 				}
 				
 			} catch (java.io.IOException e) {
@@ -260,7 +250,22 @@ public class NFControllerLogicP2P {
 			System.out.println("* El servidor no estaba ejecutándose.");
 		}
 	}
+	
+	protected void getAndPrintPeerFileInfo(NFControllerLogicDir dirLogic, String targetPeerNickname) {
+		InetSocketAddress peerAddress = dirLogic.lookupUserAddress(targetPeerNickname);
+		if (peerAddress == null) {
+			System.err.println("* Error: Peer '" + targetPeerNickname + "' no encontrado en el directorio.");
+			return;
+		}
 
+		try {
+			NFConnector connector = new NFConnector(peerAddress);
+			connector.getPeerFileList();
+		} catch (IOException e) {
+			System.err.println("* Error al conecatar el peer: " + e.getMessage());
+		}
+	}
+	
 	protected boolean serving() {
 		// Estamos sirviendo ficheros si la instancia de nuestro servidor no es nula
 		return fileServer != null;

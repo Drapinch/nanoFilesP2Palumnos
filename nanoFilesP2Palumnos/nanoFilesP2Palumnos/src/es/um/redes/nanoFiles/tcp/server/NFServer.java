@@ -3,11 +3,16 @@ package es.um.redes.nanoFiles.tcp.server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.net.InetSocketAddress;
+
+import es.um.redes.nanoFiles.application.NanoFiles;
 import es.um.redes.nanoFiles.tcp.message.PeerMessage;
 import es.um.redes.nanoFiles.tcp.message.PeerMessageOps;
+import es.um.redes.nanoFiles.util.FileInfo;
 
 
 
@@ -15,9 +20,7 @@ import es.um.redes.nanoFiles.tcp.message.PeerMessageOps;
 public class NFServer implements Runnable {
 
 	public static final int PORT = 10000;
-
-
-
+	private Thread serverBackgroundThread;
 	private ServerSocket serverSocket;
 
 	public NFServer() throws IOException {
@@ -126,8 +129,6 @@ public class NFServer implements Runnable {
 	 * servidor (stopserver) 3) Obtener el puerto de escucha del servidor etc.
 	 */
 	
-	private Thread serverBackgroundThread;
-	
 	public void startServer() {
 		// Arrancamos esta misma clase (que implementa Runnable) en un hilo aparte
 		serverBackgroundThread = new Thread(this);
@@ -175,8 +176,8 @@ public class NFServer implements Runnable {
 				String requestedHash = request.getHash();
 				
 				// 1. Obtener los ficheros que compartimos y buscar el hash
-				es.um.redes.nanoFiles.util.FileInfo[] files = es.um.redes.nanoFiles.application.NanoFiles.db.getFiles();
-				es.um.redes.nanoFiles.util.FileInfo[] matches = es.um.redes.nanoFiles.util.FileInfo.lookupHashSubstring(files, requestedHash);
+				FileInfo[] files = NanoFiles.db.getFiles();
+				FileInfo[] matches = FileInfo.lookupHashSubstring(files, requestedHash);
 
 				if (matches == null || matches.length == 0) {
 					// No existe
@@ -191,9 +192,9 @@ public class NFServer implements Runnable {
 				} else {
 					// 2. Encontrado. Lo leemos del disco duro
 					String fullHash = matches[0].fileHash;
-					String filePath = es.um.redes.nanoFiles.application.NanoFiles.db.lookupFilePath(fullHash);
-					java.io.File file = new java.io.File(filePath);
-					byte[] fileData = java.nio.file.Files.readAllBytes(file.toPath());
+					String filePath = NanoFiles.db.lookupFilePath(fullHash);
+					File file = new File(filePath);
+					byte[] fileData = Files.readAllBytes(file.toPath());
 
 					// 3. Montamos el mensaje con los datos y lo enviamos
 					PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_FILE_DATA);
@@ -208,11 +209,11 @@ public class NFServer implements Runnable {
 			}
 			else if (request.getOpcode() == PeerMessageOps.OPCODE_FILELIST_REQ) {
 			    // 1. Obtener la lista de ficheros que comparte este servidor
-			    es.um.redes.nanoFiles.util.FileInfo[] files = es.um.redes.nanoFiles.application.NanoFiles.db.getFiles();
+			   FileInfo[] files = NanoFiles.db.getFiles();
 			    
 			    // 2. Convertir esa lista a un String gigante formateado (puedes usar un StringBuilder)
 			    StringBuilder sb = new StringBuilder();
-			    for (es.um.redes.nanoFiles.util.FileInfo f : files) {
+			    for (FileInfo f : files) {
 			        sb.append(f.fileHash).append(" - ").append(f.fileName).append(" (").append(f.fileSize).append(" bytes)\n");
 			    }
 			    
