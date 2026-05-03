@@ -291,10 +291,29 @@ public class DirectoryConnector {
 	 */
 	public boolean registerFileServer(int serverPort) {
 		boolean success = false;
-
 		// TODO: Ver TODOs en pingDirectory y seguir esquema similar
+		// 1. Construir el mensaje de registro
+		DirMessage request = DirMessage.buildRegisterServerRequest(serverPort);
+		// (Asegúrate de que el método buildRegisterServerRequest de DirMessage añada también el nickname actual)
+		request.setNickname(NanoFiles.peerNickname); 
 
+		// 2. Enviar el mensaje y esperar respuesta
+		byte[] responseBytes = buildAndSendAndReceive(request);
 
+		// 3. Procesar la respuesta
+		if (responseBytes != null) {
+			String responseString = new String(responseBytes);
+			DirMessage responseMessage = DirMessage.fromString(responseString);
+
+			if (responseMessage.getOperation().equals(DirMessageOps.OPERATION_REGISTER_SERVER_OK)) {
+				System.out.println(" [*] Servidor registrado correctamente en el directorio.");
+				success = true;
+			} else {
+				System.err.println(" [X] Error registrando el servidor en el directorio.");
+			}
+		} else {
+			System.err.println(" [X] Timeout: El directorio no responde al registro.");
+		}
 
 		return success;
 	}
@@ -306,19 +325,86 @@ public class DirectoryConnector {
 	 * @return Los ficheros disponibles en el directorio, o null si el directorio no
 	 *         pudo satisfacer nuestra solicitud
 	 */
+	/**
+	 * Método para obtener la lista de ficheros alojados en el directorio. Para cada
+	 * fichero se debe obtener un objeto FileInfo con nombre, tamaño y hash.
+	 * 
+	 * @return Los ficheros disponibles en el directorio, o null si el directorio no
+	 *         pudo satisfacer nuestra solicitud
+	 */
 	public FileInfo[] getFileList() {
 		FileInfo[] filelist = new FileInfo[0];
-		// TODO: Ver TODOs en pingDirectory y seguir esquema similar
+		
+		// 1. Construir el mensaje de petición de lista de ficheros
+		DirMessage request = DirMessage.build(DirMessageOps.OPERATION_FILELIST);
 
+		// 2. Enviar el mensaje y esperar respuesta
+		byte[] responseBytes = buildAndSendAndReceive(request);
 
+		// 3. Procesar la respuesta
+		if (responseBytes != null) {
+			String responseString = new String(responseBytes);
+			DirMessage responseMessage = DirMessage.fromString(responseString);
+
+			if (responseMessage.getOperation().equals(DirMessageOps.OPERATION_FILELIST_OK)) {
+				String rawList = responseMessage.getFileList();
+				if (rawList != null && !rawList.isEmpty()) {
+					// Asumiendo que el servidor envía la lista como "hash1,nombre1,tam1;hash2,nombre2,tam2..."
+					// Esto dependerá de cómo lo hayas implementado en NFDirectoryServer
+					String[] files = rawList.split(";");
+					filelist = new FileInfo[files.length];
+					for (int i = 0; i < files.length; i++) {
+						String[] fileData = files[i].split(",");
+						if (fileData.length == 3) {
+							filelist[i] = new FileInfo(fileData[0], fileData[1], Long.parseLong(fileData[2]), "");
+						}
+					}
+				}
+			} else {
+				System.err.println(" [X] Error solicitando la lista de ficheros al directorio.");
+			}
+		} else {
+			System.err.println(" [X] Timeout: El directorio no responde a la petición de ficheros.");
+		}
 
 		return filelist;
 	}
-
+	
 	public Map<String, InetSocketAddress> getPeerList() {
 		Map<String, InetSocketAddress> peers = new LinkedHashMap<String, InetSocketAddress>();
 
+		// 1. Construir el mensaje de petición de peers
+		DirMessage request = DirMessage.build(DirMessageOps.OPERATION_PEERLIST);
 
+		// 2. Enviar el mensaje y esperar respuesta
+		byte[] responseBytes = buildAndSendAndReceive(request);
+
+		// 3. Procesar la respuesta
+		if (responseBytes != null) {
+			String responseString = new String(responseBytes);
+			DirMessage responseMessage = DirMessage.fromString(responseString);
+
+			if (responseMessage.getOperation().equals(DirMessageOps.OPERATION_PEERLIST_OK)) {
+				String rawList = responseMessage.getPeerList();
+				if (rawList != null && !rawList.isEmpty()) {
+					// Asumiendo que el servidor envía la lista como "nick1,IP1,port1;nick2,IP2,port2..."
+					String[] peerEntries = rawList.split(";");
+					for (String entry : peerEntries) {
+						String[] peerData = entry.split(",");
+						if (peerData.length == 3) {
+							String nick = peerData[0];
+							String ip = peerData[1];
+							int port = Integer.parseInt(peerData[2]);
+							peers.put(nick, new InetSocketAddress(ip, port));
+						}
+					}
+				}
+			} else {
+				System.err.println(" [X] Error solicitando la lista de peers al directorio.");
+			}
+		} else {
+			System.err.println(" [X] Timeout: El directorio no responde a la petición de peers.");
+		}
 
 		return peers;
 	}
@@ -348,11 +434,36 @@ public class DirectoryConnector {
 	 * @return Verdadero si el directorio tiene registrado a este peer como servidor
 	 *         y ha dado de baja sus ficheros.
 	 */
+	/**
+	 * Método para darse de baja como servidor de ficheros.
+	 * 
+	 * @return Verdadero si el directorio tiene registrado a este peer como servidor
+	 *         y ha dado de baja sus ficheros.
+	 */
 	public boolean unregisterFileServer() {
 		boolean success = false;
 
+		// 1. Construir el mensaje de baja
+		DirMessage request = DirMessage.build(DirMessageOps.OPERATION_UNREGISTER_SERVER);
+		request.setNickname(NanoFiles.peerNickname);
 
+		// 2. Enviar el mensaje y esperar respuesta
+		byte[] responseBytes = buildAndSendAndReceive(request);
 
+		// 3. Procesar la respuesta
+		if (responseBytes != null) {
+			String responseString = new String(responseBytes);
+			DirMessage responseMessage = DirMessage.fromString(responseString);
+
+			if (responseMessage.getOperation().equals(DirMessageOps.OPERATION_UNREGISTER_SERVER_OK)) {
+				System.out.println(" [*] Te has dado de baja correctamente en el directorio.");
+				success = true;
+			} else {
+				System.err.println(" [X] Error al darse de baja en el directorio.");
+			}
+		} else {
+			System.err.println(" [X] Timeout: El directorio no responde a la baja.");
+		}
 
 		return success;
 	}

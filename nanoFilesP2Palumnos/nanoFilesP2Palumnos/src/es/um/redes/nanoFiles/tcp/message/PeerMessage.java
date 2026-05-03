@@ -154,7 +154,6 @@ public class PeerMessage {
 		 * dos.write para leer un array de bytes, dos.writeInt para escribir un entero,
 		 * etc.
 		 */
-
 		dos.writeByte(opcode);
 		switch (opcode) {
 		case PeerMessageOps.OPCODE_FILELIST_REQ:
@@ -163,7 +162,6 @@ public class PeerMessage {
 			// TODO: Estos mensajes son de formato "Control" (Solo opcode). 
 			// No hay que enviar nada más.
 			break;
-
 		case PeerMessageOps.OPCODE_DOWNLOAD_REQ:
 			// TODO: El cliente envía el hash que quiere descargar.
 			// dos.writeUTF(...) facilita el envío de Strings.
@@ -179,7 +177,6 @@ public class PeerMessage {
 			dos.writeLong(size);      // 3. Mandamos cuántos bytes ocupan los datos
 			dos.write(fileData);      // 4. Mandamos el array de bytes con el contenido
 			break;
-
 		default:
 			System.err.println("PeerMessage.writeMessageToOutputStream found unexpected message opcode " + opcode + "("
 					+ PeerMessageOps.opcodeToOperation(opcode) + ")");

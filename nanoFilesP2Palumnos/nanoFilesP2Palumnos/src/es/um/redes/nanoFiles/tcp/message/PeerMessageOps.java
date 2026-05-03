@@ -32,16 +32,8 @@ public class PeerMessageOps {
 	 * mensajes definidos anteriormente, añadirlos al array "valid_opcodes" y añadir
 	 * su representación textual a "valid_operations_str" EN EL MISMO ORDEN.
 	 */
-	private static final Byte[] _valid_opcodes = { OPCODE_INVALID_CODE,
-
-
-
-	};
-	private static final String[] _valid_operations_str = { "INVALID_OPCODE",
-
-
-
-	};
+	private static final Byte[] _valid_opcodes = { OPCODE_INVALID_CODE,};
+	private static final String[] _valid_operations_str = { "INVALID_OPCODE",};
 
 	private static Map<String, Byte> _operation_to_opcode;
 	private static Map<Byte, String> _opcode_to_operation;

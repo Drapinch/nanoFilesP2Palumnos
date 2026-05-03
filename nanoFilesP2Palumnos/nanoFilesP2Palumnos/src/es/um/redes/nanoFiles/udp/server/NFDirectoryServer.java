@@ -19,7 +19,7 @@ public class NFDirectoryServer {
 	 * Número de puerto UDP en el que escucha el directorio
 	 */
 	public static final int DIRECTORY_PORT = 6868;
-
+	private static final double MESSAGE_PROBABILITY = 15;
 	/**
 	 * Socket de comunicación UDP con el cliente UDP (DirectoryConnector)
 	 */
@@ -177,14 +177,43 @@ public class NFDirectoryServer {
 	}
 
 	public void run() throws IOException {
+		byte[] receptionBuffer = new byte[DirMessage.PACKET_MAX_SIZE];
+		DatagramPacket requestPacket = new DatagramPacket(receptionBuffer, receptionBuffer.length);
 
 		System.out.println("Directory starting...");
 
-		while (true) { // Bucle principal del servidor de directorio
-			DatagramPacket rcvDatagram = receiveDatagram();
+		while (true) {
+			System.out.println("Waiting for requests...");
+			// Recibimos un datagrama del cliente
+			socket.receive(requestPacket);
 
-			sendResponse(rcvDatagram);
+			// Simulamos pérdida de paquetes si es necesario
+			double randomValue = Math.random();
+			if (randomValue >= MESSAGE_PROBABILITY) {
+				System.out.println("Message dropped due to simulated packet loss.");
+				continue;
+			}
 
+			// Extraemos la IP y el puerto de origen para poder responder
+			InetSocketAddress clientAddr = (InetSocketAddress) requestPacket.getSocketAddress();
+
+			// Extraemos los datos del datagrama recibido
+			String messageString = new String(requestPacket.getData(), 0, requestPacket.getLength());
+			
+			// Reconstruimos el objeto DirMessage a partir de la cadena recibida
+			DirMessage requestMessage = DirMessage.fromString(messageString);
+
+			// Procesamos la petición y generamos la respuesta
+			DirMessage responseMessage = processRequestFromClient(requestMessage, clientAddr);
+
+			// Si hay una respuesta que enviar, la enviamos
+			if (responseMessage != null) {
+				String responseString = responseMessage.toString();
+				byte[] responseData = responseString.getBytes();
+				DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length, clientAddr);
+				socket.send(responsePacket);
+				System.out.println("Response sent to " + clientAddr);
+			}
 		}
 	}
 
@@ -274,6 +303,101 @@ public class NFDirectoryServer {
 		DatagramPacket responsePkt = new DatagramPacket(responseData, responseData.length, pkt.getSocketAddress());
 		socket.send(responsePkt);
 
+	}
+	
+	private DirMessage processRequestFromClient(DirMessage request, InetSocketAddress clientAddr) {
+		String operation = request.getOperation();
+		DirMessage response = null;
+
+		System.out.println("Received request: " + operation + " from " + clientAddr);
+
+		switch (operation) {
+		case DirMessageOps.OPERATION_PING:
+			// Respuesta simple para comprobar que el directorio está vivo
+			response = DirMessage.build(DirMessageOps.OPERATION_PING_OK);
+			break;
+
+		case DirMessageOps.OPERATION_LOGIN:
+			String nickname = request.getNickname();
+			if (nickname != null && !nickname.isEmpty()) {
+				// Puedes añadir lógica aquí para comprobar si el nick ya está en uso, 
+				// pero para la versión básica, simplemente lo aceptamos.
+				response = DirMessage.build(DirMessageOps.OPERATION_LOGIN_OK);
+				System.out.println("User logged in: " + nickname);
+			} else {
+				response = DirMessage.build(DirMessageOps.OPERATION_ERROR);
+			}
+			break;
+
+		case DirMessageOps.OPERATION_REGISTER_SERVER:
+			String serverNick = request.getNickname();
+			int serverPort = request.getServerPort();
+			
+			if (serverNick != null && serverPort > 0) {
+				// Guardamos la IP desde donde nos habla el cliente y el puerto TCP que nos indica
+				InetSocketAddress serverAddr = new InetSocketAddress(clientAddr.getAddress(), serverPort);
+				peers.put(serverNick, serverAddr);
+				response = DirMessage.build(DirMessageOps.OPERATION_REGISTER_SERVER_OK);
+				System.out.println("Registered server for " + serverNick + " at " + serverAddr);
+			} else {
+				response = DirMessage.build(DirMessageOps.OPERATION_ERROR);
+			}
+			break;
+
+		case DirMessageOps.OPERATION_UNREGISTER_SERVER:
+			String nickToRemove = request.getNickname();
+			if (nickToRemove != null && peers.containsKey(nickToRemove)) {
+				Peers.remove(nickToRemove);
+				response = DirMessage.build(DirMessageOps.OPERATION_UNREGISTER_SERVER_OK);
+				System.out.println("Unregistered server: " + nickToRemove);
+			} else {
+				response = DirMessage.build(DirMessageOps.OPERATION_ERROR);
+			}
+			break;
+
+		case DirMessageOps.OPERATION_FILELIST:
+			// El cliente quiere saber qué archivos tiene el directorio
+			StringBuilder filesSb = new StringBuilder();
+			if (directoryFiles != null && directoryFiles.length > 0) {
+				for (int i = 0; i < directoryFiles.length; i++) {
+					FileInfo f = directoryFiles[i];
+					// Formato: hash,nombre,tamaño;hash,nombre,tamaño...
+					filesSb.append(f.fileHash).append(",").append(f.fileName).append(",").append(f.fileSize);
+					if (i < directoryFiles.length - 1) {
+						filesSb.append(";");
+					}
+				}
+			}
+			response = DirMessage.build(DirMessageOps.OPERATION_FILELIST_OK);
+			response.setFileList(filesSb.toString());
+			break;
+
+		case DirMessageOps.OPERATION_PEERLIST:
+			// El cliente quiere saber qué peers están registrados como servidores
+			StringBuilder peersSb = new StringBuilder();
+			int count = 0;
+			for (Map.Entry<String, InetSocketAddress> entry : peers.entrySet()) {
+				// Formato: nick,IP,puerto;nick,IP,puerto...
+				peersSb.append(entry.getKey()).append(",")
+					   .append(entry.getValue().getAddress().getHostAddress()).append(",")
+					   .append(entry.getValue().getPort());
+				
+				count++;
+				if (count < peers.size()) {
+					peersSb.append(";");
+				}
+			}
+			response = DirMessage.build(DirMessageOps.OPERATION_PEERLIST_OK);
+			response.setPeerList(peersSb.toString());
+			break;
+
+		default:
+			System.out.println("Unknown operation: " + operation);
+			response = DirMessage.build(DirMessageOps.OPERATION_ERROR);
+			break;
+		}
+
+		return response;
 	}
 
 }

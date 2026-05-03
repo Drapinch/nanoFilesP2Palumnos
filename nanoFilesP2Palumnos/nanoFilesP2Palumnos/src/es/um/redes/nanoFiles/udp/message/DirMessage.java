@@ -56,7 +56,11 @@ public class DirMessage {
 
 
 	public DirMessage(String op) {
-		operation = op;
+		this.operation = op;
+		this.nickname = null;
+		this.serverPort = 0;
+		this.fileList = null;
+		this.peerList = null;
 	}
 
 	/*
@@ -70,9 +74,6 @@ public class DirMessage {
 		this.status = status;
 	}
 
-	public String getOperation() {
-		return operation;
-	}
 
 	/*
 	 * TODO: (Boletín MensajesASCII) Crear métodos getter y setter para obtener los
@@ -91,47 +92,20 @@ public class DirMessage {
 	public String getProtocolId() {
 		return protocolId;
 	}
+	
+	public String getOperation() { return operation; }
+	public String getNickname() { return nickname; }
+	public int getServerPort() { return serverPort; }
+	public String getFileList() { return fileList; }
+	public String getPeerList() { return peerList; }
+	public String getStatus() { return status; }
 
-	public String getStatus() {
-		return status;
-	}
-
-	public void setStatus(String status) {
-		this.status = status;
-	}
-
-	public String getNickname() {
-		return nickname;
-	}
-
-	public void setNickname(String nickname) {
-		this.nickname = nickname;
-	}
-
-	public int getServerPort() {
-		return serverPort;
-	}
-
-	public void setServerPort(int serverPort) {
-		this.serverPort = serverPort;
-	}
-
-	public String getFileList() {
-		return fileList;
-	}
-
-	public void setFileList(String fileList) {
-		this.fileList = fileList;
-	}
-
-	public String getPeerList() {
-		return peerList;
-	}
-
-	public void setPeerList(String peerList) {
-		this.peerList = peerList;
-	}
-
+	// --- Setters ---
+	public void setNickname(String nickname) { this.nickname = nickname; }
+	public void setServerPort(int serverPort) { this.serverPort = serverPort; }
+	public void setFileList(String fileList) { this.fileList = fileList; }
+	public void setPeerList(String peerList) { this.peerList = peerList; }
+	public void setStatus(String status) { this.status = status; }
 
 	/**
 	 * Método que convierte un mensaje codificado como una cadena de caracteres, a
@@ -148,12 +122,10 @@ public class DirMessage {
 		 * línea, extrayendo para cada línea el nombre del campo y el valor, usando el
 		 * delimitador DELIMITER, y guardarlo en variables locales.
 		 */
-
+		DirMessage m = new DirMessage(DirMessageOps.OPERATION_INVALID);
 		// System.out.println("DirMessage read from socket:");
 		// System.out.println(message);
 		String[] lines = message.split(END_LINE + "");
-		// Local variables to save data during parsing
-		DirMessage m = null;
 
 
 
@@ -241,6 +213,22 @@ public class DirMessage {
 
 		sb.append(END_LINE); // Marcamos el final del mensaje
 		return sb.toString();
+	}
+	
+	public static DirMessage build(String operation) {
+		return new DirMessage(operation);
+	}
+
+	public static DirMessage buildLoginRequest(String nickname) {
+		DirMessage m = new DirMessage(DirMessageOps.OPERATION_LOGIN);
+		m.setNickname(nickname);
+		return m;
+	}
+
+	public static DirMessage buildRegisterServerRequest(int serverPort) {
+		DirMessage m = new DirMessage(DirMessageOps.OPERATION_REGISTER_SERVER);
+		m.setServerPort(serverPort);
+		return m;
 	}
 
 }
