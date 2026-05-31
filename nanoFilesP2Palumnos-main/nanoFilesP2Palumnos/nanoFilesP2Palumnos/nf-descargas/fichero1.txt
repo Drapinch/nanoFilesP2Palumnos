@@ -1,0 +1,3 @@
+Hola, soy el fichero 1.
+Estoy en el servidor de ficheros A y quiero ser descargado.
+¡Prueba superada!

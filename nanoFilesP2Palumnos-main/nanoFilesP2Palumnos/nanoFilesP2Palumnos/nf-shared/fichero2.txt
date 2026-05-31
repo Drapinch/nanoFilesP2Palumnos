@@ -1,0 +1,2 @@
+Este es el segundo fichero de prueba.
+Si ves esto, la transferencia TCP P2P funciona a la perfección.
