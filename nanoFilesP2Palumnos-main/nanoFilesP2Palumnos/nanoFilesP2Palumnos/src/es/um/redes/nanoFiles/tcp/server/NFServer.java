@@ -29,7 +29,12 @@ public class NFServer implements Runnable {
 		 * especificado (PORT)
 		 */
 		serverSocket = new ServerSocket();
-		serverSocket.bind(new InetSocketAddress(PORT));
+		try {
+			serverSocket.bind(new InetSocketAddress(PORT));
+		} catch (java.net.BindException e) {
+			// Fallback: si el puerto 10000 está ocupado, ligar a un puerto libre cualquiera (puerto 0)
+			serverSocket.bind(new InetSocketAddress(0));
+		}
 		/*
 		 * TODO: (Boletín SocketsTCP) Crear un socket servidor y ligarlo a la dirección
 		 * de socket anterior
@@ -37,6 +42,10 @@ public class NFServer implements Runnable {
 
 
 
+	}
+
+	public int getPort() {
+		return serverSocket != null ? serverSocket.getLocalPort() : 0;
 	}
 
 	/**
@@ -61,7 +70,7 @@ public class NFServer implements Runnable {
 			 * TODO: (Boletín SocketsTCP) Usar el socket servidor para esperar conexiones de
 			 * otros peers que soliciten descargar ficheros.
 			 */
-			System.out.println(" [*] Servidor TCP de prueba escuchando en el puerto " + PORT);
+			System.out.println(" [*] Servidor TCP de prueba escuchando en el puerto " + getPort());
 			Socket clientSocket = serverSocket.accept();
 			System.out.println(" [*] ¡Cliente conectado desde: " + clientSocket.getInetAddress() + "!");
 			/*
@@ -103,7 +112,7 @@ public class NFServer implements Runnable {
 		 * hilo es el que se encarga de atender al cliente conectado, no podremos tener
 		 * más de un cliente conectado a este servidor.
 		 */
-		System.out.println(" [*] Servidor TCP CONCURRENTE escuchando en el puerto " + PORT);
+		System.out.println(" [*] Servidor TCP CONCURRENTE escuchando en el puerto " + getPort());
 		
 		while (!serverSocket.isClosed()){
 			try {
@@ -194,17 +203,42 @@ public class NFServer implements Runnable {
 					String fullHash = matches[0].fileHash;
 					String filePath = NanoFiles.db.lookupFilePath(fullHash);
 					File file = new File(filePath);
-					byte[] fileData = Files.readAllBytes(file.toPath());
+					
+					long chunkOffset = request.getChunkOffset();
+					int chunkSize = request.getChunkSize();
+					byte[] fileData;
+					
+					if (chunkOffset >= 0 && chunkSize >= 0) {
+						// Leer solo el chunk solicitado
+						long endOffset = Math.min(file.length(), chunkOffset + chunkSize);
+						int actualChunkSize = (int) (endOffset - chunkOffset);
+						if (actualChunkSize < 0) {
+							actualChunkSize = 0;
+						}
+						fileData = new byte[actualChunkSize];
+						if (actualChunkSize > 0) {
+							try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "r")) {
+								raf.seek(chunkOffset);
+								raf.readFully(fileData);
+							}
+						}
+					} else {
+						// Si no se especifica chunk, descargar entero (offset = 0)
+						chunkOffset = 0;
+						fileData = Files.readAllBytes(file.toPath());
+					}
 
 					// 3. Montamos el mensaje con los datos y lo enviamos
 					PeerMessage response = new PeerMessage(PeerMessageOps.OPCODE_FILE_DATA);
 					response.setHash(fullHash);
 					response.setName(file.getName());
-					response.setSize(file.length());
+					response.setSize(fileData.length);
 					response.setFileData(fileData);
+					response.setChunkOffset(chunkOffset);
+					response.setTotalFileSize(file.length());
 
 					response.writeMessageToOutputStream(dos);
-					System.out.println(" [*] Fichero '" + file.getName() + "' enviado exitosamente al cliente.");
+					System.out.println(" [*] Fichero/fragmento '" + file.getName() + "' (offset: " + chunkOffset + ", len: " + fileData.length + ") enviado al cliente.");
 				}
 			}
 			else if (request.getOpcode() == PeerMessageOps.OPCODE_FILELIST_REQ) {

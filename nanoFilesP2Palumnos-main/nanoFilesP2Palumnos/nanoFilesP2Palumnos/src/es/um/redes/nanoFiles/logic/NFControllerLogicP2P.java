@@ -5,6 +5,13 @@ import java.io.IOException;
 import es.um.redes.nanoFiles.tcp.client.NFConnector;
 import es.um.redes.nanoFiles.application.NanoFiles;
 import es.um.redes.nanoFiles.tcp.server.NFServer;
+import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import es.um.redes.nanoFiles.util.FileDigest;
+import es.um.redes.nanoFiles.util.FileNameUtil;
+import es.um.redes.nanoFiles.tcp.message.PeerMessage;
+import es.um.redes.nanoFiles.tcp.message.PeerMessageOps;
 
 public class NFControllerLogicP2P {
 	// Servidor TCP local para compartir ficheros con otros peers
@@ -35,12 +42,12 @@ public class NFControllerLogicP2P {
 			 */
 			try {
 				fileServer = new NFServer();
-				if (NFServer.PORT > 0) {
+				if (fileServer.getPort() > 0) {
 					fileServer.startServer();
-					System.out.println("* File server started in background, listening on port " + NFServer.PORT);
+					System.out.println("* File server started in background, listening on port " + fileServer.getPort());
 					
 					// Registrar en el directorio
-					if (dirLogic.registerFileServer(NFServer.PORT)) {
+					if (dirLogic.registerFileServer(fileServer.getPort())) {
 						serverRunning = true;
 					} else {
 						System.err.println("* Error: Could not register file server in the directory.");
@@ -149,11 +156,28 @@ public class NFControllerLogicP2P {
 		InetSocketAddress[] serverList = null;
 
 		if (targetPeerNickname.equals("*")) {
-			// Lógica para descargar desde cualquier/todos los peers que tengan el archivo
-			// (Depende de si tu dirLogic tiene un método para buscar IPs por hash de archivo)
-			// serverList = dirLogic.lookupServersSharingFile(targetHashSubstring);
-			System.err.println("* Descarga desde múltiples fuentes (*) pendiente de implementación en el Directorio");
-			return false;
+			// 1. Buscar los peers que tienen el archivo por substring de hash
+			System.out.println(" [*] Buscando servidores que compartan un fichero coincidente con: " + targetHashSubstring);
+			Map<String, InetSocketAddress[]> searchResults = dirLogic.searchFilesByHash(targetHashSubstring);
+			if (searchResults.isEmpty()) {
+				System.err.println(" [X] No se encontraron servidores compartiendo ningún fichero que coincida con el hash: " + targetHashSubstring);
+				return false;
+			}
+			if (searchResults.size() > 1) {
+				System.err.println(" [X] Búsqueda ambigua. El hash coincide con múltiples ficheros:");
+				for (String hash : searchResults.keySet()) {
+					System.err.println("   - " + hash);
+				}
+				return false;
+			}
+			// Encontrado exactamente un hash
+			String fullHash = searchResults.keySet().iterator().next();
+			serverList = searchResults.get(fullHash);
+			System.out.println(" [*] Fichero encontrado con hash completo: " + fullHash);
+			System.out.println(" [*] Compartido por " + serverList.length + " servidor(es).");
+			
+			// Lógica de descarga multitarea desde varios servidores alternando fragmentos
+			return downloadFileFromServersMultisource(serverList, fullHash);
 		} else {
 			// Lógica para descargar desde un peer concreto
 			InetSocketAddress peerAddress = dirLogic.lookupUserAddress(targetPeerNickname); 
@@ -163,9 +187,119 @@ public class NFControllerLogicP2P {
 				return false;
 			}
 			serverList = new InetSocketAddress[] { peerAddress };
+			return downloadFileFromServers(serverList, targetHashSubstring);
+		}
+	}
+
+	protected boolean downloadFileFromServersMultisource(InetSocketAddress[] serverAddressList, String expectedFullHash) {
+		if (serverAddressList == null || serverAddressList.length == 0) {
+			System.err.println(" [X] Lista de servidores vacía.");
+			return false;
 		}
 
-		return downloadFileFromServers(serverList, targetHashSubstring);
+		int numServers = serverAddressList.length;
+		System.out.println(" [*] Iniciando descarga secuencial multitarea desde " + numServers + " servidor(es)...");
+
+		// 1. Obtener metadatos (nombre de archivo y tamaño total) usando el primer servidor que responda
+		String fileName = null;
+		long totalSize = -1;
+		
+		for (InetSocketAddress addr : serverAddressList) {
+			try {
+				System.out.println(" [*] Obteniendo metadatos del archivo desde: " + addr);
+				NFConnector conn = new NFConnector(addr);
+				PeerMessage response = conn.downloadFileChunk(expectedFullHash, 0, 0); // Petición de tamaño 0
+				if (response != null && response.getOpcode() == PeerMessageOps.OPCODE_FILE_DATA) {
+					fileName = response.getName();
+					totalSize = response.getTotalFileSize();
+					System.out.println(" [V] Metadatos obtenidos. Fichero: " + fileName + ", Tamaño: " + totalSize + " bytes");
+					break;
+				}
+			} catch (IOException e) {
+				System.err.println(" [X] No se pudo obtener metadatos de " + addr + ": " + e.getMessage());
+			}
+		}
+
+		if (fileName == null || totalSize <= 0) {
+			System.err.println(" [X] Error: No se pudieron obtener los metadatos del fichero de ningún servidor.");
+			return false;
+		}
+
+		// 2. Descargar por fragmentos secuenciales
+		long chunkSize = (totalSize + numServers - 1) / numServers;
+		byte[] fileBuffer = new byte[(int) totalSize];
+		long[] bytesDownloadedPerServer = new long[numServers];
+
+		for (int i = 0; i < numServers; i++) {
+			long offset = i * chunkSize;
+			int len = (int) Math.min(chunkSize, totalSize - offset);
+			if (len <= 0) break;
+
+			boolean chunkDownloaded = false;
+			// Intentar con cada servidor alternativo si el principal para este chunk falla
+			for (int attempt = 0; attempt < numServers; attempt++) {
+				int serverIndex = (i + attempt) % numServers;
+				InetSocketAddress addr = serverAddressList[serverIndex];
+				try {
+					System.out.println(" [*] Descargando fragmento " + i + " (" + len + " bytes desde offset " + offset + ") del servidor " + addr);
+					NFConnector conn = new NFConnector(addr);
+					PeerMessage response = conn.downloadFileChunk(expectedFullHash, offset, len);
+					if (response != null && response.getOpcode() == PeerMessageOps.OPCODE_FILE_DATA) {
+						byte[] data = response.getFileData();
+						if (data != null && data.length == len) {
+							System.arraycopy(data, 0, fileBuffer, (int) offset, len);
+							bytesDownloadedPerServer[serverIndex] += len;
+							chunkDownloaded = true;
+							System.out.println(" [V] Fragmento " + i + " descargado con éxito.");
+							break;
+						} else {
+							System.err.println(" [X] Tamaño de datos incorrecto devuelto por " + addr);
+						}
+					}
+				} catch (IOException e) {
+					System.err.println(" [X] Error al descargar fragmento de " + addr + ": " + e.getMessage());
+				}
+			}
+
+			if (!chunkDownloaded) {
+				System.err.println(" [X] Error: No se pudo descargar el fragmento " + i + " de ningún servidor disponible.");
+				return false;
+			}
+		}
+
+		// 3. Guardar el archivo en el disco
+		String fullPath = es.um.redes.nanoFiles.application.NanoFiles.sharedDirname + java.io.File.separator + fileName;
+		Path safePath = FileNameUtil.chooseAvailableName(fullPath);
+		try {
+			Files.write(safePath, fileBuffer);
+		} catch (IOException e) {
+			System.err.println(" [X] Error de escritura en disco: " + e.getMessage());
+			return false;
+		}
+
+		// 4. Verificar integridad con hash completo
+		String localHash = FileDigest.computeFileChecksumString(safePath.toString());
+		if (localHash.equals(expectedFullHash)) {
+			System.out.println(" [V] ¡Verificación de integridad de hash OK! Checksum: " + localHash);
+		} else {
+			System.err.println(" [X] ¡Error de integridad de hash! Checksum local: " + localHash + ", esperado: " + expectedFullHash + ". Borrando archivo.");
+			try {
+				Files.deleteIfExists(safePath);
+			} catch (IOException e) {}
+			return false;
+		}
+
+		// 5. Imprimir resumen final de las acciones llevadas a cabo
+		System.out.println("\n================ RESUMEN DE DESCARGA PEERDL * ================");
+		System.out.println("Fichero: " + fileName + " (" + totalSize + " bytes)");
+		System.out.println("Hash esperado: " + expectedFullHash);
+		System.out.println("Acciones realizadas:");
+		for (int j = 0; j < numServers; j++) {
+			System.out.println(" - Conexión al servidor " + serverAddressList[j] + ": descargados " + bytesDownloadedPerServer[j] + " bytes");
+		}
+		System.out.println("===============================================================\n");
+
+		return true;
 	}
 
 	/**
@@ -224,8 +358,7 @@ public class NFControllerLogicP2P {
 	protected int getServerPort() {
 		int port = 0;
 		if (fileServer != null) {
-			// Se asume que NFServer usa la constante estática PORT, o un getter equivalente
-			port = NFServer.PORT; 
+			port = fileServer.getPort(); 
 		}
 		return port;
 	}
@@ -242,9 +375,6 @@ public class NFControllerLogicP2P {
 			// 1. Detenemos el hilo y cerramos el socket
 			fileServer.stopServer();
 			fileServer = null;
-			
-			// 2. Nos damos de baja en el directorio
-			dirLogic.unregisterFileServer();
 			
 			System.out.println("* Servidor detenido. Ya no compartes ficheros.");
 		} else {

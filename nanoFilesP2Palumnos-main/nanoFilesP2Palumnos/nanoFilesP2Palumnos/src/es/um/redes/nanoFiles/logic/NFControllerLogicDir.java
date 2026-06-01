@@ -221,4 +221,8 @@ public class NFControllerLogicDir {
 		}
 	}
 
+	public Map<String, InetSocketAddress[]> searchFilesByHash(String hashSubstring) {
+		return directoryConnector.searchFilesByHash(hashSubstring);
+	}
+
 }

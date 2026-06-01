@@ -13,6 +13,7 @@ import es.um.redes.nanoFiles.tcp.message.PeerMessage;
 import es.um.redes.nanoFiles.tcp.message.PeerMessageOps;
 import es.um.redes.nanoFiles.util.FileDigest;
 import es.um.redes.nanoFiles.util.FileNameUtil;
+import es.um.redes.nanoFiles.util.FileInfo;
 
 //Esta clase proporciona la funcionalidad necesaria para intercambiar mensajes entre el cliente y el servidor
 public class NFConnector {
@@ -158,5 +159,72 @@ public class NFConnector {
 			System.err.println("Error al obtener la lista de ficheros: " + e.getMessage());
 		}
 		return success;
+	}
+
+	public FileInfo[] getPeerFileListData() {
+		try {
+			DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+			DataInputStream dis = new DataInputStream(socket.getInputStream());
+
+			PeerMessage request = new PeerMessage(PeerMessageOps.OPCODE_FILELIST_REQ);
+			request.writeMessageToOutputStream(dos);
+
+			PeerMessage response = PeerMessage.readMessageFromInputStream(dis);
+
+			if (response.getOpcode() == PeerMessageOps.OPCODE_FILELIST_RESP) {
+				String rawList = response.getFileList();
+				if (rawList == null || rawList.isBlank()) {
+					return new FileInfo[0];
+				}
+				String[] lines = rawList.split("\n");
+				java.util.List<FileInfo> list = new java.util.ArrayList<>();
+				for (String line : lines) {
+					if (line.isBlank()) continue;
+					int dashIdx = line.indexOf(" - ");
+					if (dashIdx != -1) {
+						String hash = line.substring(0, dashIdx).trim();
+						String rest = line.substring(dashIdx + 3).trim();
+						int openParenIdx = rest.lastIndexOf(" (");
+						if (openParenIdx != -1) {
+							String name = rest.substring(0, openParenIdx).trim();
+							String sizeStr = rest.substring(openParenIdx + 2).trim();
+							int spaceIdx = sizeStr.indexOf(" ");
+							if (spaceIdx != -1) {
+								sizeStr = sizeStr.substring(0, spaceIdx).trim();
+							}
+							long size = Long.parseLong(sizeStr);
+							list.add(new FileInfo(hash, name, size, null));
+						}
+					}
+				}
+				return list.toArray(new FileInfo[0]);
+			}
+		} catch (Exception e) {
+			System.err.println("Error parsing peer file list: " + e.getMessage());
+		} finally {
+			try { socket.close(); } catch (IOException e) {}
+		}
+		return null;
+	}
+
+	public PeerMessage downloadFileChunk(String targetHashSubstring, long offset, int size) {
+		try {
+			DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+			DataInputStream dis = new DataInputStream(socket.getInputStream());
+
+			PeerMessage request = new PeerMessage(PeerMessageOps.OPCODE_DOWNLOAD_REQ);
+			request.setHash(targetHashSubstring);
+			request.setChunkOffset(offset);
+			request.setChunkSize(size);
+			request.writeMessageToOutputStream(dos);
+
+			PeerMessage response = PeerMessage.readMessageFromInputStream(dis);
+			return response;
+		} catch (IOException e) {
+			System.err.println("Error downloading chunk at offset " + offset + ": " + e.getMessage());
+			return null;
+		} finally {
+			try { socket.close(); } catch (IOException e) {}
+		}
 	}
 }

@@ -20,6 +20,9 @@ public class PeerMessage {
 	private long size;           // Tamaño del fichero o del fragmento
 	private byte[] fileData;
 	private String fileList;
+	private long chunkOffset = -1;
+	private int chunkSize = -1;
+	private long totalFileSize = -1;
 	
 	public PeerMessage() {
 		opcode = PeerMessageOps.OPCODE_INVALID_CODE;
@@ -77,6 +80,30 @@ public class PeerMessage {
 		this.fileList = fileList;
 	}
 
+	public long getChunkOffset() {
+		return chunkOffset;
+	}
+
+	public void setChunkOffset(long chunkOffset) {
+		this.chunkOffset = chunkOffset;
+	}
+
+	public int getChunkSize() {
+		return chunkSize;
+	}
+
+	public void setChunkSize(int chunkSize) {
+		this.chunkSize = chunkSize;
+	}
+
+	public long getTotalFileSize() {
+		return totalFileSize;
+	}
+
+	public void setTotalFileSize(long totalFileSize) {
+		this.totalFileSize = totalFileSize;
+	}
+
 
 
 
@@ -112,6 +139,8 @@ public class PeerMessage {
 			// TODO: Leer el string del hash enviado por el cliente
 			String requestedHash = dis.readUTF();
 			message.setHash(requestedHash);
+			message.setChunkOffset(dis.readLong());
+			message.setChunkSize(dis.readInt());
 			break;
 
 		case PeerMessageOps.OPCODE_FILE_DATA:
@@ -127,6 +156,9 @@ public class PeerMessage {
 			byte[] data = new byte[(int) dataSize];
 			dis.readFully(data);                  // Muy importante usar readFully para binario
 			message.setFileData(data);
+			
+			message.setChunkOffset(dis.readLong());
+			message.setTotalFileSize(dis.readLong());
 			break;
 			
 		case PeerMessageOps.OPCODE_FILELIST_RESP:
@@ -160,6 +192,8 @@ public class PeerMessage {
 			// TODO: El cliente envía el hash que quiere descargar.
 			// dos.writeUTF(...) facilita el envío de Strings.
 			dos.writeUTF(hash);
+			dos.writeLong(chunkOffset);
+			dos.writeInt(chunkSize);
 			break;
 
 		case PeerMessageOps.OPCODE_FILE_DATA:
@@ -170,6 +204,8 @@ public class PeerMessage {
 			dos.writeUTF(name);       // 2. Mandamos el nombre
 			dos.writeLong(size);      // 3. Mandamos cuántos bytes ocupan los datos
 			dos.write(fileData);      // 4. Mandamos el array de bytes con el contenido
+			dos.writeLong(chunkOffset);
+			dos.writeLong(totalFileSize);
 			break;
 		case PeerMessageOps.OPCODE_FILELIST_RESP:
 			dos.writeUTF(fileList);

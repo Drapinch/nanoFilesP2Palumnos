@@ -176,6 +176,8 @@ public class NFController {
 			if (controllerPeer.serving()) {
 				controllerPeer.stopFileServer(controllerDir);
 				commandSucceeded = controllerDir.unregisterFileServer();
+			} else {
+				commandSucceeded = true;
 			}
 			break;
 		case NFCommands.COM_NICK:

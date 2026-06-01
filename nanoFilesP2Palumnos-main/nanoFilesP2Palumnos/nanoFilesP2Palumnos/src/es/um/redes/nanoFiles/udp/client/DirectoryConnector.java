@@ -416,7 +416,46 @@ public class DirectoryConnector {
 	public Map<String, InetSocketAddress[]> searchFilesByHash(String hashSubstring) {
 		Map<String, InetSocketAddress[]> results = new LinkedHashMap<String, InetSocketAddress[]>();
 
+		// 1. Obtener la lista de peers registrados en el directorio
+		Map<String, InetSocketAddress> peerList = getPeerList();
+		if (peerList == null || peerList.isEmpty()) {
+			return results;
+		}
 
+		// 2. Consultar por TCP a cada servidor si tiene un fichero cuyo hash contenga la subcadena
+		Map<String, java.util.List<InetSocketAddress>> matchesMap = new LinkedHashMap<>();
+		for (Map.Entry<String, InetSocketAddress> entry : peerList.entrySet()) {
+			String peerName = entry.getKey();
+			InetSocketAddress peerAddr = entry.getValue();
+
+			// Evitar conectarnos a nosotros mismos
+			if (peerName.equals(NanoFiles.peerNickname)) {
+				continue;
+			}
+
+			try {
+				es.um.redes.nanoFiles.tcp.client.NFConnector conn = new es.um.redes.nanoFiles.tcp.client.NFConnector(peerAddr);
+				FileInfo[] files = conn.getPeerFileListData();
+				if (files != null) {
+					FileInfo[] matched = FileInfo.lookupHashSubstring(files, hashSubstring);
+					for (FileInfo f : matched) {
+						java.util.List<InetSocketAddress> list = matchesMap.get(f.fileHash);
+						if (list == null) {
+							list = new java.util.ArrayList<>();
+							matchesMap.put(f.fileHash, list);
+						}
+						list.add(peerAddr);
+					}
+				}
+			} catch (IOException e) {
+				System.err.println("* Error connecting to peer " + peerName + " @ " + peerAddr + " during search: " + e.getMessage());
+			}
+		}
+
+		// 3. Convertir el mapa de List a Array
+		for (Map.Entry<String, java.util.List<InetSocketAddress>> entry : matchesMap.entrySet()) {
+			results.put(entry.getKey(), entry.getValue().toArray(new InetSocketAddress[0]));
+		}
 
 		return results;
 	}
