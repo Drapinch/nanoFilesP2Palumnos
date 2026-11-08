@@ -106,16 +106,17 @@ public class NFShell {
 			case NFCommands.COM_QUIT:
 			case NFCommands.COM_FILELIST_DIR:
 			case NFCommands.COM_MYFILES:
-			case NFCommands.COM_SERVE:
 			case NFCommands.COM_PEERLIST:
 			case NFCommands.COM_PING:
 				// Estos comandos son válidos sin parámetros
 				break;
+			case NFCommands.COM_SERVE:
 			case NFCommands.COM_FILELIST_PEER:
 			case NFCommands.COM_DOWNLOAD_DIR:
 			case NFCommands.COM_DOWNLOAD_PEER:
 			case NFCommands.COM_NICK:
-				// Estos requieren parámetros
+			case NFCommands.COM_WHOHAS:
+				// Estos aceptan o requieren parámetros
 				while (st.hasMoreTokens()) {
 					vargs.add(st.nextToken());
 				}
@@ -136,6 +137,31 @@ public class NFShell {
 		if (skipValidateArgs)
 			return false;
 		switch (this.command) {
+		case NFCommands.COM_SERVE:
+			if (args.length > 1) {
+				System.out.println(
+						"Correct use: " + NFCommands.commandToString(command) + " [<chunk_size_in_KB>]");
+				return false;
+			}
+			if (args.length == 1) {
+				try {
+					int n = Integer.parseInt(args[0]);
+					if (n <= 0) {
+						System.err.println("* Error: Chunk size must be a positive integer (in KB).");
+						return false;
+					}
+				} catch (NumberFormatException e) {
+					System.err.println("* Error: Chunk size must be a valid integer number (in KB).");
+					return false;
+				}
+			}
+			break;
+		case NFCommands.COM_WHOHAS:
+			if (args.length != 1) {
+				System.out.println("Correct use: " + NFCommands.commandToString(command) + " <filename_substring>");
+				return false;
+			}
+			break;
 		case NFCommands.COM_DOWNLOAD_DIR:
 			if (args.length != 1) {
 				System.out.println(

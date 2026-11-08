@@ -10,17 +10,15 @@ public class NFCommands {
 	public static final byte COM_PING = 3;
 	public static final byte COM_FILELIST_DIR = 4;
 	public static final byte COM_SERVE = 11;
+	public static final byte COM_PEERLIST = 12;
+	public static final byte COM_FILELIST_PEER = 13;
+	public static final byte COM_NICK = 14;
+	public static final byte COM_WHOHAS = 15;
 	public static final byte COM_DOWNLOAD_DIR = 25;
 	public static final byte COM_DOWNLOAD_PEER = 26;
 	public static final byte COM_HELP = 50;
 	public static final byte COM_SOCKET_IN = 100;
-	public static final byte COM_PEERLIST = 12;
-	public static final byte COM_FILELIST_PEER = 13;
-// Upload command removed
-	public static final byte COM_NICK = 14;
 
-
-	
 	/**
 	 * Códigos de los comandos válidos que puede
 	 * introducir el usuario del shell. El orden
@@ -38,62 +36,60 @@ public class NFCommands {
 		COM_DOWNLOAD_DIR,
 		COM_DOWNLOAD_PEER,
 		COM_NICK,
-		COM_HELP,
-		COM_SOCKET_IN
-		};
+		COM_WHOHAS,
+		COM_HELP
+	};
 
 	/**
-	 * cadena exacta de cada orden
+	 * Cadena exacta de cada orden
 	 */
 	private static final String[] _valid_user_commands_str = {
-			"quit",
-			"myfiles",
-			"ping",
-			"dirfiles",
-			"peerfiles",
-			"serve",
-			"peers",
-			"dirdl",
-			"peerdl",
-			"nick",
-			"help"
-		};
+		"quit",
+		"myfiles",
+		"ping",
+		"dirfiles",
+		"peerfiles",
+		"serve",
+		"peers",
+		"dirdl",
+		"peerdl",
+		"nick",
+		"whohas",
+		"help"
+	};
 
 	/**
 	 * Mensaje de ayuda para cada orden
 	 */
 	private static final String[] _valid_user_commands_help = {
-			"quit the application",
-			"show contents of local folder (files that may be served)",
-			"ping directory to check protocol compatibility",
-			"show list of files served by the directory",
-			"show list of files served by a peer (by nickname)",
-			"run file server and register it with directory",
-			"show list of peers registered in the directory",
-			"download file from directory by hash substring (keeps remote name)",
-			"download file from a specific peer by hash substring (keeps remote name)",
-			"change local nickname before serving files",
-			"shows this information"
-			};
+		"quit the application (unregisters this peer from directory if registered)",
+		"show contents of local folder (files that may be served)",
+		"ping directory to check protocol compatibility",
+		"show list of files served by the directory",
+		"show list of files served by a peer (by nickname)",
+		"run file server and register it with directory, optional chunk size [N] (in KB)",
+		"show list of peers registered in the directory",
+		"download file from directory by hash substring (keeps remote name)",
+		"download file from a peer or '*' for sequential multi-peer download",
+		"change local nickname before serving files",
+		"search files shared by other peers or directory by name substring",
+		"shows this information"
+	};
 
 	/**
 	 * Transforma una cadena introducida en el código de comando correspondiente
 	 */
 	public static byte stringToCommand(String comStr) {
-		//Busca entre los comandos si es válido y devuelve su código
-		for (int i = 0;
-		i < _valid_user_commands_str.length; i++) {
+		for (int i = 0; i < _valid_user_commands_str.length; i++) {
 			if (_valid_user_commands_str[i].equalsIgnoreCase(comStr)) {
 				return _valid_user_commands[i];
 			}
 		}
-		//Si no se corresponde con ninguna cadena entonces devuelve el código de comando no válido
 		return COM_INVALID;
 	}
 
 	public static String commandToString(byte command) {
-		for (int i = 0;
-		i < _valid_user_commands.length; i++) {
+		for (int i = 0; i < _valid_user_commands_str.length; i++) {
 			if (_valid_user_commands[i] == command) {
 				return _valid_user_commands_str[i];
 			}
@@ -111,4 +107,4 @@ public class NFCommands {
 					+ _valid_user_commands_help[i]);
 		}		
 	}
-}	
+}

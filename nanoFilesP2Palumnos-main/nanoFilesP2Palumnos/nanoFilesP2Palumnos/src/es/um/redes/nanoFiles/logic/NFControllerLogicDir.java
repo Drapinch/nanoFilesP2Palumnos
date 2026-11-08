@@ -11,6 +11,7 @@ public class NFControllerLogicDir {
 
 	// Conector para enviar y recibir mensajes del directorio
 	private DirectoryConnector directoryConnector;
+	private boolean registeredAsServer = false;
 
 	/**
 	 * Construye el controlador encargado de implementar la lógica de los comandos
@@ -34,28 +35,13 @@ public class NFControllerLogicDir {
 	 * Método para comprobar que la comunicación con el directorio es exitosa (se
 	 * pueden enviar y recibir datagramas) haciendo uso de la clase
 	 * DirectoryConnector
-	 * 
-	 * @return true si se ha conseguido contactar con el directorio.
 	 */
 	protected void testCommunicationWithDirectory() {
 		assert (NanoFiles.testModeUDP);
 		System.out.println(
 				"[testMode] Testing communication with directory: " + this.directoryConnector.getDirectoryHostname());
-		/*
-		 * Utiliza el DirectoryConnector para hacer una prueba de comunicación con el
-		 * directorio. Primero testSendAndReceive envía un mensaje "ping" y espera
-		 * obtener "welcome" como respuesta. Luego pingDirectoryRaw hace lo mismo que
-		 * testSendAndReceive pero enviando además el "protocol ID" para ver si el
-		 * directorio es compatible
-		 */
 		if (directoryConnector.testSendAndReceive()) {
 			System.out.println("[testMode] testSendAndReceived - TEST PASSED!");
-			/*
-			 * (Boletín EstructuraNanoFiles) Test similar al de testSendAndReceive, pero
-			 * ampliado para comprobar si el directorio es compatible con el protocol ID,
-			 * usando para la comunicación mensajes "en crudo" (sin un formato bien
-			 * definido).
-			 */
 			if (directoryConnector.pingDirectoryRaw()) {
 				System.out.println("[testMode] pingDirectoryRaw - SUCCESS!");
 			} else {
@@ -88,10 +74,17 @@ public class NFControllerLogicDir {
 	 * Método para obtener y mostrar la lista de ficheros alojados en el directorio
 	 */
 	protected void getAndPrintFileList() {
-		FileInfo[] trackedFiles = directoryConnector.getFileList(); //
+		FileInfo[] trackedFiles = directoryConnector.getFileList();
 		System.out.println(
 				"* These are the files tracked by the directory at " + directoryConnector.getDirectoryHostname());
 		FileInfo.printToSysout(trackedFiles);
+	}
+
+	/**
+	 * Método para obtener la lista de ficheros alojados en el directorio
+	 */
+	public FileInfo[] fetchFileList() {
+		return directoryConnector.getFileList();
 	}
 
 	/**
@@ -119,8 +112,7 @@ public class NFControllerLogicDir {
 
 	/**
 	 * Método para registrarse en el directorio como servidor de ficheros en un
-	 * puerto determinado. Si el nickname ya está registrado, el directorio debe
-	 * devolver el nuevo nickname asignado a este peer durante el registro.
+	 * puerto determinado.
 	 * 
 	 * @param serverPort El puerto TCP en el que está escuchando el servidor de
 	 *                   ficheros.
@@ -129,23 +121,21 @@ public class NFControllerLogicDir {
 	protected boolean registerFileServer(int serverPort) {
 		boolean result = false;
 		if (this.directoryConnector.registerFileServer(serverPort)) {
-
-
-
 			System.out.println("* File server successfully registered with the directory");
+			registeredAsServer = true;
 			result = true;
 		} else {
 			System.err.println("* File server failed to register with the directory");
-
-
-
 		}
 		return result;
 	}
 
-
-
-
+	/**
+	 * Comprueba si este peer está actualmente registrado como servidor en el directorio.
+	 */
+	public boolean isRegisteredAsServer() {
+		return registeredAsServer;
+	}
 
 	/**
 	 * Método para descargar un fichero del directorio y guardarlo con su nombre
@@ -153,7 +143,7 @@ public class NFControllerLogicDir {
 	 */
 	protected boolean downloadAndSaveFromDirectory(String hashSubstring) {
 		DirectoryConnector.DownloadedFile dl = directoryConnector.downloadFileFromDirectory(hashSubstring);
-		if (dl == null) {
+		if (dl == null || dl.data == null) {
 			System.err.println("* Failed to download file given by hash substring " + hashSubstring);
 			return false;
 		}
@@ -189,6 +179,7 @@ public class NFControllerLogicDir {
 		boolean result = false;
 		if (this.directoryConnector.unregisterFileServer()) {
 			System.out.println("* File server successfully unregistered with the directory");
+			registeredAsServer = false;
 			result = true;
 		} else {
 			System.err.println("* File server failed to unregister with the directory");
@@ -198,6 +189,10 @@ public class NFControllerLogicDir {
 
 	protected String getDirectoryHostname() {
 		return directoryConnector.getDirectoryHostname();
+	}
+
+	public InetSocketAddress getDirectoryAddress() {
+		return directoryConnector.getDirectoryAddress();
 	}
 
 	private String toDisplayPath(java.nio.file.Path path) {
@@ -210,10 +205,7 @@ public class NFControllerLogicDir {
 	}
 	
 	public InetSocketAddress lookupUserAddress(String nickname) {
-		// 1. Pedimos al directorio el diccionario (Map) con todos los usuarios conectados
 		Map<String, InetSocketAddress> peerList = directoryConnector.getPeerList();
-		
-		// 2. Buscamos en el diccionario la dirección que corresponde a ese nickname
 		if (peerList != null && peerList.containsKey(nickname)) {
 			return peerList.get(nickname);
 		} else {
@@ -224,5 +216,4 @@ public class NFControllerLogicDir {
 	public Map<String, InetSocketAddress[]> searchFilesByHash(String hashSubstring) {
 		return directoryConnector.searchFilesByHash(hashSubstring);
 	}
-
 }

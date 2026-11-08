@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import es.um.redes.nanoFiles.application.NanoFiles;
 import es.um.redes.nanoFiles.shell.NFCommands;
 import es.um.redes.nanoFiles.shell.NFShell;
+import es.um.redes.nanoFiles.tcp.server.NFServer;
 import es.um.redes.nanoFiles.util.FileInfo;
 
 public class NFController {
@@ -42,13 +43,13 @@ public class NFController {
 	private byte currentState;
 	/**
 	 * Atributos donde se establecen los argumentos pasados a los distintos comandos
-	 * del shell. Estos atributos se establecen automáticamente según la orden y se
-	 * deben usar para pasar los valores de los parámetros a las funciones invocadas
-	 * desde este controlador.
+	 * del shell.
 	 */
 	private String targetHashSubstring; // Nombre del fichero a descargar
 	private String targetPeerNickname; // Nickname para listar ficheros de un peer (peerfiles)
 	private String newNickname; // Nuevo nickname solicitado por el usuario
+	private String targetFilenameSubstring; // Subcadena para búsqueda con whohas
+	private int serverChunkSizeKB = NFServer.DEFAULT_CHUNK_SIZE_KB; // Tamaño de fragmento para serve N
 
 	// Constructor
 	public NFController(String defaultDirectory) {
@@ -61,6 +62,17 @@ public class NFController {
 		// Estado inicial del autómata
 		currentState = OFFLINE;
 
+		// Gancho de cierre de la JVM para garantizar que se da de baja en el directorio si se cierra la app
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			try {
+				if (controllerPeer != null && controllerPeer.serving()) {
+					controllerPeer.stopFileServer(controllerDir);
+				}
+				if (controllerDir != null && controllerDir.isRegisteredAsServer()) {
+					controllerDir.unregisterFileServer();
+				}
+			} catch (Exception e) {}
+		}));
 	}
 
 	/**
@@ -87,48 +99,24 @@ public class NFController {
 		if (!canProcessCommandInCurrentState()) {
 			return;
 		}
-		/*
-		 * En función del comando, invocar los métodos adecuados de NFControllerLogicDir
-		 * y NFControllerLogicP2P, ya que son estas dos clases las que implementan
-		 * realmente la lógica de cada comando y procesan la información recibida
-		 * mediante la comunicación con el directorio u otros pares de NanoFiles
-		 * (imprimir por pantalla el resultado de la acción y los datos recibidos,
-		 * etc.).
-		 */
+
 		boolean commandSucceeded = false;
 		switch (currentCommand) {
 		case NFCommands.COM_MYFILES:
 			showMyLocalFiles(); // Muestra los ficheros en el directorio local compartido
 			break;
 		case NFCommands.COM_PING:
-			/*
-			 * Pedir al controllerDir enviar un "ping" al directorio, para comprobar que
-			 * está activo y disponible, y comprobar que es compatible.
-			 */
 			commandSucceeded = controllerDir.ping();
 			break;
 		case NFCommands.COM_FILELIST_DIR:
-			/*
-			 * Pedir al controllerDir que obtenga del directorio la lista de ficheros que
-			 * tiene, y la imprima por pantalla
-			 */
 			controllerDir.getAndPrintFileList();
 			break;
 		case NFCommands.COM_PEERLIST:
-			/*
-			 * Pedir al controllerDir que obtenga del directorio la lista de pares que están
-			 * sirviendo ficheros y la imprima por pantalla.
-			 */
 			controllerDir.getAndPrintPeerList();
 			break;
 		case NFCommands.COM_FILELIST_PEER:
-			/*
-			 * Pedir al controllerDir que obtenga del directorio la lista de pares que están
-			 * sirviendo ficheros, y luego pedir al controllerPeer que obtenga la lista de
-			 * ficheros que tiene disponible el peer dado por "targetPeerNickname"
-			 */
 			java.util.Map<String, InetSocketAddress> peers = controllerDir.fetchPeerList();
-			InetSocketAddress peerAddr = peers.get(targetPeerNickname);
+			InetSocketAddress peerAddr = peers != null ? peers.get(targetPeerNickname) : null;
 			if (peerAddr == null) {
 				System.err.println("* Peer '" + targetPeerNickname + "' not found in directory");
 				break;
@@ -140,41 +128,26 @@ public class NFController {
 					targetHashSubstring);
 			break;
 		case NFCommands.COM_SERVE:
-			/*
-			 * Pedir al controllerPeer que lance un servidor de ficheros. Si el servidor se
-			 * ha podido iniciar correctamente, pedir al controllerDir darnos de alta como
-			 * servidor de ficheros en el directorio, indicando el puerto en el que nuestro
-			 * servidor escucha conexiones de otros peers así como la lista de ficheros
-			 * disponibles.
-			 */
 			if (NanoFiles.testModeTCP) {
 				controllerPeer.testTCPServer();
 			} else {
-				boolean serverRunning = controllerPeer.startFileServer(controllerDir);
-				if (serverRunning) {
-					commandSucceeded = controllerDir.registerFileServer(controllerPeer.getServerPort());
-				} else {
-					System.err.println("Cannot start file server");
-				}
+				// Arrancar servidor de ficheros con el tamaño de fragmento indicado (en KB) y registrarlo
+				commandSucceeded = controllerPeer.startFileServer(controllerDir, serverChunkSizeKB);
 			}
 			break;
 		case NFCommands.COM_DOWNLOAD_DIR:
-			/*
-			 * Descargar directamente un fichero pequeño servido por el directorio (carpeta
-			 * dir-shared), identificado por subcadena de hash. Solo se descarga si el
-			 * tamaño cabe en un datagrama (lo asegura el servidor al responder).
-			 */
 			commandSucceeded = controllerDir.downloadAndSaveFromDirectory(targetHashSubstring);
 			break;
+		case NFCommands.COM_WHOHAS:
+			commandSucceeded = controllerPeer.whoHas(controllerDir, targetFilenameSubstring);
+			break;
 		case NFCommands.COM_QUIT:
-			/*
-			 * Pedir al controllerPeer que pare el servidor en segundo plano (método método
-			 * stopBackgroundFileServer). A continuación, pedir al controllerDir que
-			 * solicite al directorio darnos de baja como servidor de ficheros (método
-			 * unregisterFileServer).
-			 */
+			// Detener el servidor de ficheros si está en ejecución
 			if (controllerPeer.serving()) {
 				controllerPeer.stopFileServer(controllerDir);
+			}
+			// Dar de baja a los peers registrados en el directorio
+			if (controllerDir.isRegisteredAsServer()) {
 				commandSucceeded = controllerDir.unregisterFileServer();
 			} else {
 				commandSucceeded = true;
@@ -224,13 +197,13 @@ public class NFController {
 		case NFCommands.COM_DOWNLOAD_PEER:
 		case NFCommands.COM_SERVE:
 		case NFCommands.COM_DOWNLOAD_DIR:
+		case NFCommands.COM_WHOHAS:
 			if (currentState == OFFLINE) {
 				System.err.println("* You must ping the directory first before running this command.");
 				commandAllowed = false;
 			}
 			break;
 		default:
-			// System.err.println("ERROR: undefined behaviour for " + currentCommand + " command!");
 		}
 		return commandAllowed;
 	}
@@ -253,7 +226,6 @@ public class NFController {
 			break;
 		default:
 		}
-
 	}
 
 	private void showMyLocalFiles() {
@@ -271,8 +243,6 @@ public class NFController {
 
 	/**
 	 * Establece el comando actual
-	 * 
-	 * @param command el comando tecleado en el shell
 	 */
 	private void setCurrentCommand(byte command) {
 		currentCommand = command;
@@ -284,6 +254,16 @@ public class NFController {
 	 */
 	private void setCurrentCommandArguments(String[] args) {
 		switch (currentCommand) {
+		case NFCommands.COM_SERVE:
+			if (args.length == 1) {
+				serverChunkSizeKB = Integer.parseInt(args[0]);
+			} else {
+				serverChunkSizeKB = NFServer.DEFAULT_CHUNK_SIZE_KB;
+			}
+			break;
+		case NFCommands.COM_WHOHAS:
+			targetFilenameSubstring = args[0];
+			break;
 		case NFCommands.COM_DOWNLOAD_DIR:
 			targetHashSubstring = args[0];
 			break;
@@ -305,12 +285,8 @@ public class NFController {
 	 * Método para leer un comando general
 	 */
 	public void readGeneralCommandFromShell() {
-		// Pedimos el comando al shell
 		shell.readGeneralCommand();
-		// Establecemos que el comando actual es el que ha obtenido el shell
 		setCurrentCommand(shell.getCommand());
-		// Analizamos los posibles parámetros asociados al comando
 		setCurrentCommandArguments(shell.getCommandArguments());
 	}
-
 }
